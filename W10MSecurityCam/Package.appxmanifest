@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  IgnorableNamespaces="uap mp">
+
+  <Identity Name="W10MSecurityCam" Publisher="CN=W10MSecurityCam" Version="1.9.1.0" />
+  <mp:PhoneIdentity PhoneProductId="f28d6867-338a-434a-8789-29db4aa27619" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+
+  <Properties>
+    <DisplayName>W10MSecurityCam</DisplayName>
+    <PublisherDisplayName>W10MSecurityCam</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.14393.0" MaxVersionTested="10.0.17763.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="W10MSecurityCam.App">
+      <uap:VisualElements
+        DisplayName="W10MSecurityCam"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png"
+        Description="Always-on security camera serving RTSP to an NVR over Wi-Fi"
+        BackgroundColor="#1A1A1A">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png"/>
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#1A1A1A"/>
+        <uap:InitialRotationPreference>
+          <uap:Rotation Preference="landscape"/>
+        </uap:InitialRotationPreference>
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClientServer" />
+    <Capability Name="privateNetworkClientServer" />
+    <DeviceCapability Name="webcam" />
+    <DeviceCapability Name="microphone" />
+  </Capabilities>
+</Package>
