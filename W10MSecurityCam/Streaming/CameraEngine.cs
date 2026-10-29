@@ -72,6 +72,8 @@ namespace W10MSecurityCam.Streaming
         private bool _audioConfigChecked;
         public bool IsStreaming { get; private set; }
         private bool _previewing;
+        /// <summary>True while the camera preview is running.</summary>
+        public bool Previewing => _previewing;
 
         private Mp4H264Extractor _extractor;
         private W10MSecurityCam.Native.EncodedFrameSink _nativeSink;
@@ -190,6 +192,9 @@ namespace W10MSecurityCam.Streaming
         public async Task SetPreviewAsync(bool on)
         {
             if (Capture == null || on == _previewing) return; // avoid redundant start/stop calls on the camera
+            // Starting or stopping the preview while a recording runs stalls the 4K pipeline (the engine then restarts) and
+            // can end the app, so it only ever changes while the stream is stopped.
+            if (IsStreaming) { Log("Preview change skipped while streaming (it applies when the stream restarts)"); return; }
             try
             {
                 if (on) await Capture.StartPreviewAsync();
@@ -453,8 +458,23 @@ namespace W10MSecurityCam.Streaming
         /// <summary>Encoded sample straight from the hardware encoder (native path).</summary>
         private long _latSum, _latCount, _latMax, _devSum, _devCount, _devMax, _maxFrameBytes;
 
+        private int _frameErrors;
+        private volatile int _frameStep; // where the frame handler was when it threw (the stack trace is stripped in release builds)
+
         private void OnEncodedFrame(byte[] data, long sampleTime, bool keyframe, long queueDelay, long deviceLatency)
         {
+            // Runs on the native sink's worker thread: an exception escaping here used to end the app (fast-fail abort).
+            try { OnEncodedFrameCore(data, sampleTime, keyframe, queueDelay, deviceLatency); }
+            catch (Exception ex)
+            {
+                if (_frameErrors++ < 5) Log("Frame handler error at step " + _frameStep + " (frame skipped): " + ex.GetType().Name + ": " + ex.Message + " " + (ex.StackTrace ?? "").Split('\n').FirstOrDefault());
+            }
+        }
+
+        private void OnEncodedFrameCore(byte[] data, long sampleTime, bool keyframe, long queueDelay, long deviceLatency)
+        {
+            if (data == null || data.Length == 0) return; // an empty sample at start-up: nothing to send
+            _frameStep = 1;
             if (queueDelay >= 0 && queueDelay < 100000000) { _latSum += queueDelay; _latCount++; _latMax = Math.Max(_latMax, queueDelay); }
             if (deviceLatency >= 0 && deviceLatency < 100000000) { _devSum += deviceLatency; _devCount++; _devMax = Math.Max(_devMax, deviceLatency); }
             _maxFrameBytes = Math.Max(_maxFrameBytes, data.Length);
@@ -473,6 +493,7 @@ namespace W10MSecurityCam.Streaming
                 catch (Exception ex) { Log("Sequence header: " + ex.Message); }
             }
 
+            _frameStep = 2;
             long now = _clock.ElapsedMilliseconds;
             if (_nativeLastMs >= 0) _nativeMaxGapMs = Math.Max(_nativeMaxGapMs, now - _nativeLastMs);
             _nativeLastMs = now;
@@ -494,6 +515,7 @@ namespace W10MSecurityCam.Streaming
                 _latSum = _latCount = _latMax = _devSum = _devCount = _devMax = _maxFrameBytes = 0;
             }
 
+            _frameStep = 3;
             LastSampleTime = sampleTime;
             // One sample from the encoder = one frame. Pass it on whole, with the encoder's own timestamp.
             var au = new List<byte[]>(4);
@@ -502,12 +524,15 @@ namespace W10MSecurityCam.Streaming
             {
                 if (nal.Length == 0) continue;
                 int type = nal[0] & 0x1F;
+                _frameStep = 4;
                 CountNal(nal, type);
+                _frameStep = 5;
                 if (type == 9) continue; // access unit delimiter: not needed over RTP
                 if (type == 7 || type == 8) NoteParameterSet(nal);
                 if (type == 5) key = true;
                 au.Add(nal);
             }
+            _frameStep = 6;
             if (au.Count > 0) AccessUnitReady?.Invoke(au, sampleTime, key);
         }
 

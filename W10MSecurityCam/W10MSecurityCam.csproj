@@ -89,6 +89,7 @@
     <Compile Include="Rtsp\DigestAuth.cs" />
     <Compile Include="Streaming\HttpApi.cs" />
     <Compile Include="Streaming\CameraTuning.cs" />
+    <Compile Include="Streaming\PowerMonitor.cs" />
     <Compile Include="Streaming\CameraPage.cs" />
     <Compile Include="Streaming\LogServer.cs" />
     <Compile Include="Streaming\AnnexB.cs" />

@@ -72,7 +72,7 @@ void EncodedMediaSink::WorkerLoop()
                 std::lock_guard<std::mutex> g(_callbackLock);
                 acb = _onAudio;
             }
-            if (acb) acb(frame.data.data(), (DWORD)frame.data.size(), frame.time);
+            try { if (acb) acb(frame.data.data(), (DWORD)frame.data.size(), frame.time); } catch (...) { }
             continue;
         }
         FrameCallback cb;
@@ -81,7 +81,7 @@ void EncodedMediaSink::WorkerLoop()
             cb = _onFrame;
         }
         LONGLONG queueDelay = MFGetSystemTime() - frame.enqueuedAt;
-        if (cb) cb(frame.data.data(), (DWORD)frame.data.size(), frame.time, frame.keyframe, queueDelay, frame.deviceLatency);
+        try { if (cb) cb(frame.data.data(), (DWORD)frame.data.size(), frame.time, frame.keyframe, queueDelay, frame.deviceLatency); } catch (...) { }
     }
 }
 
@@ -138,7 +138,7 @@ void EncodedMediaSink::Log(const wchar_t* format, ...)
         std::lock_guard<std::mutex> g(_callbackLock);
         cb = _onLog;
     }
-    if (cb) cb(buffer);
+    try { if (cb) cb(buffer); } catch (...) { }
 }
 
 void EncodedMediaSink::DeliverFrame(const BYTE* data, DWORD length, LONGLONG sampleTime, bool keyframe, LONGLONG /*unused*/, LONGLONG deviceLatency)

@@ -13,6 +13,8 @@ W10MSecurityCam/Streaming/CameraEngine.cs   MediaCapture, formats, encoder profi
 W10MSecurityCam/Streaming/CameraTuning.cs   Focus / exposure / white balance: per-setting auto, step snapping, focus once
 W10MSecurityCam/Streaming/HttpApi.cs        /, /status, /snapshot.jpg, /config (USB only), /camera (page), /camera/state, /camera/set
 W10MSecurityCam/Streaming/CameraPage.cs     The settings page (one HTML string)
+W10MSecurityCam/Streaming/PowerMonitor.cs   Net/estimated watts from the battery report, CPU use, probe=power
+W10MSecurityCam.Native/                     C++/CX Media Foundation sink (exceptions must never leave its worker thread)
 tools/                               Build-And-Deploy, logs, set-camera-config.ps1, test-rtsp.ps1, check-http.ps1
 ```
 
@@ -22,10 +24,15 @@ tools/                               Build-And-Deploy, logs, set-camera-config.p
   gates every path for non-USB requests; `FromUsb` means the peer address is 127.0.0.1 (the IP-over-USB service), which a LAN
   client cannot fake. `/camera/set` also needs the header `X-Requested-With: W10MSecurityCam` unless from USB (CSRF guard:
   browsers resend cached Digest credentials to cross-site POSTs, but cannot add a custom header without a preflight).
-  Allowed keys: camera, focus, exposure, wb, format, bitrate, highbw, powersave, stream, engine, user, password (checked).
-- **Display rules (one place):** `Adjusting` = any camera setting is manual and no blackout was asked for;
-  `BlackoutWanted` = streaming && power-save switch on && !Adjusting; `PreviewWanted` = preview switch || Adjusting.
-  `SetBlackoutAsync` is used by both the phone button and the web button.
+  Allowed keys: camera, focus, exposure, wb, format, bitrate, highbw, powersave, stream, engine, user, password (checked),
+  savepower, saveois, savefocus, probe, torch.
+- **Display rules (one place):** `Adjusting` = `_phoneAdjusting`, set only by touches on the phone (Show camera picture,
+  camera controls) and cleared 60 s after the last touch or by Black out; web changes never set it.
+  `BlackoutWanted` = streaming && black-screen switch on && !Adjusting; `PreviewWanted` = !black-screen switch || Adjusting.
+  The preview never changes mid-stream: `RestartForPreviewAsync` restarts the stream (automatic restarts at most once a
+  minute; button presses always, queued via `_previewFixPending` if a restart is already running), and a 1 s check in
+  `UpdateStats` repairs a preview left in the wrong state. A preview kept running behind the overlay was measured
+  (4K25, on battery): app CPU 12% -> 24%, phone CPU 21% -> 37%, battery draw higher; rejected.
 - **Camera tuning:** exposure must be a multiple of the camera step (range on the Lumia 950: 0.06-4000 ms; the app uses
   0.5 ms as the floor, since 0.06 ms gives a black picture); only changed controls are sent; ISO goes to auto after an
   exposure change; applies are queued, never dropped or run in parallel.
@@ -33,7 +40,7 @@ tools/                               Build-And-Deploy, logs, set-camera-config.p
 - **Crash guards:** `StartInProgress` (stream start), `TuningInProgress` (camera settings; resets to automatic),
   `LaunchInProgress`/`LaunchFailures` (two failed launches clear LocalSettings; the vault login survives).
 - **Battery/heat:** battery % from `Battery.AggregateBattery`; `EnergySaverStatus` shown read-only (apps cannot switch it
-  on). No temperature API exists for UWP on W10M; the heat hint is frame rate below 80% of the target for 30 s.
+  on). No temperature API exists for UWP on W10M; the heat signal is charging paused on an adequate charger (see below).
 - **4K30 over 2.4 GHz Wi-Fi:** 8-24 Mbps clean; 60 Mbps overloads the link ("App fell behind", camera error, stalls).
 - `Dispatcher.RunAsync` with an async lambda returns at the first await; use `RunUiAsync` when completion matters.
 - UI event handlers fire during page construction; `_loadingTuningUi` starts true to stop them overwriting saved values.
@@ -149,6 +156,11 @@ W10MSecurityCam/
 | 1.3 | RTP over UDP (opt-in), snapshots (opt-in), "charger too weak" warning |
 | 1.4.x | Microphone audio: AAC track over RTSP (TCP and UDP), sample-counted RTP timestamps |
 | 1.5.x | `format=` / `bitrate=` over USB, memory + Wi-Fi signal in `/status`, memory log every 30 min |
+| 1.9.2-1.9.4 | Camera power saving (stabilization off, held focus), longer 4K auto-start settle, `probe=devices`, HDR/denoise removed |
+| 1.9.5-1.9.6 | Power monitor (`PowerMonitor.cs`, `probe=power`), minute log line, Healthy/Unstable line |
+| 1.9.7 | Exceptions from the frame/log/audio handlers caught in the native sink worker thread (crash fix) |
+| 1.9.13-1.9.29 | Heat protection also lowers video to 1080p/6 Mbps; preview is never toggled mid-stream (stalls/crashes the 4K pipeline); blackout by default, Show camera picture (60 s) / Black out with one restart each way; folded phone layout; green theme; graphic status tiles on both screens; web notes behind (i) icons; stream-address pop-up; flashlight under Camera; empty first encoder sample ignored; `tools/Soak-Monitor.ps1` |
+| 1.9.8-1.9.12 | Flashlight (30 s limit), heat protection, red thermal warnings, folding web sections |
 
 Reference for future work (RTSP fork, dashcam fork, maintenance). User-facing setup is in README.md.
 
@@ -256,6 +268,25 @@ Safety nets kept in 1.0:
   until the app is reopened.
 - **Persistent log**: `LocalFolder\log.txt` (reset above ~2 MB), previous session kept as
   `log-previous.txt` and its last 120 lines are appended to the served log.
+
+### Crash found with Device Portal dumps (1.9.6 -> 1.9.7)
+Enabling user-mode crash dumps (`POST /api/debug/dump/usermode/crashcontrol?packageFullName=...&maxCount=3`, per package
+version) gave a dump with exception 0xC0000409, parameter 7 (FAST_FAIL_FATAL_APP_EXIT) at `ucrtbase` abort: a C++
+exception left the native sink's `std::thread` worker (`WorkerLoop` calls the C# `FrameReceived` handler). Fix: try/catch
+around every callback in `EncodedMediaSink.cpp` and the `Raise*` functions, and in `CameraEngine.OnEncodedFrame`.
+Download a dump with `GET /api/debug/dump/usermode/crashdump?packageFullName=...&fileName=...` (not `/dump`).
+
+### Heat and power (Lumia 950, measured)
+- No temperature is readable by apps. `Battery.AggregateBattery` status `Idle` while `PowerSupplyStatus` is `Adequate`
+  and the level is below 95% means charging is paused (hot). The frame rate does not change when the phone is hot.
+- Net power: remaining mWh change averaged over up to 5 minutes, restarted when the charging state changes; the phone's
+  own draw is only known on battery or while charging is paused. Windows' instantaneous rate read 7-10 W at 4K25 on
+  battery with the screen black. The start/stop chirp is Windows' recording sound (follows the ringer volume). 4K25 at 24 Mbps with
+  the screen blacked out: about +2 to +5 W net while charging; 7-10 W draw once charging pauses (hot phone, flashlight).
+- The torch (`MediaCapture.VideoDeviceController.TorchControl`) is on/off only on this phone; repeated use led to
+  Windows' overheating warning, which closes the app. Hence the 30 s limit and heat protection.
+- Device Portal login is the same PIN pairing as the deploy tool: POST the PIN to `/api/authorize/pair?pin=...` with the
+  `CSRF-Token` cookie echoed in an `X-CSRF-Token` header and a `Content-Length`. `tools/Monitor-Portal.ps1` does this.
 
 ## Dev-environment pitfalls
 

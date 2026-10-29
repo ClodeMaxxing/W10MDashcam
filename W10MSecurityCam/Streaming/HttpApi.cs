@@ -109,7 +109,7 @@ namespace W10MSecurityCam.Streaming
                     return Reply(403, "Forbidden", "text/plain", "Use the settings page (missing X-Requested-With header)\n");
                 var all = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password" })
+                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch" })
                     if (all.TryGetValue(k, out var v)) only[k] = v;
                 string bad = CheckLoginFields(only);
                 if (bad != null) result = bad;

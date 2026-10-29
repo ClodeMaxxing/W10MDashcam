@@ -102,8 +102,15 @@ Array<uint8>^ EncodedFrameSink::GetSequenceHeader()
 
 void EncodedFrameSink::RaiseFrame(const BYTE* data, DWORD length, LONGLONG sampleTime, bool keyframe, LONGLONG queueDelay, LONGLONG deviceLatency)
 {
-    auto copy = ref new Array<uint8>(const_cast<uint8*>(data), length);
-    FrameReceived(copy, sampleTime, keyframe, queueDelay, deviceLatency);
+    // Runs on the sink's worker thread. An exception escaping from here would reach std::terminate and kill the app
+    // (crash dump: 0xC0000409 fast-fail in ucrtbase), so catch everything and report it as a log line instead.
+    try
+    {
+        auto copy = ref new Array<uint8>(const_cast<uint8*>(data), length);
+        FrameReceived(copy, sampleTime, keyframe, queueDelay, deviceLatency);
+    }
+    catch (Platform::Exception^ e) { ReportCallbackError(L"video frame", e->HResult); }
+    catch (...) { ReportCallbackError(L"video frame", 0); }
 }
 
 Array<uint8>^ EncodedFrameSink::GetAudioConfig()
@@ -116,11 +123,26 @@ Array<uint8>^ EncodedFrameSink::GetAudioConfig()
 
 void EncodedFrameSink::RaiseAudio(const BYTE* data, DWORD length, LONGLONG sampleTime)
 {
-    auto copy = ref new Array<uint8>(const_cast<uint8*>(data), length);
-    AudioReceived(copy, sampleTime);
+    try
+    {
+        auto copy = ref new Array<uint8>(const_cast<uint8*>(data), length);
+        AudioReceived(copy, sampleTime);
+    }
+    catch (Platform::Exception^ e) { ReportCallbackError(L"audio frame", e->HResult); }
+    catch (...) { ReportCallbackError(L"audio frame", 0); }
 }
 
 void EncodedFrameSink::RaiseLog(const wchar_t* message)
 {
-    LogMessage(ref new String(message));
+    try { LogMessage(ref new String(message)); }
+    catch (...) { }
+}
+
+void EncodedFrameSink::ReportCallbackError(const wchar_t* what, int hr)
+{
+    // Limit to a handful of lines so a handler that always throws cannot flood the log.
+    if (_callbackErrors++ >= 5) return;
+    wchar_t buffer[160];
+    swprintf_s(buffer, L"The app's %s handler threw an exception (0x%08X) - ignored", what, (unsigned)hr);
+    RaiseLog(buffer);
 }

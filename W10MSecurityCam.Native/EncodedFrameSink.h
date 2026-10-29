@@ -41,12 +41,14 @@ namespace W10MSecurityCam
             void RaiseFrame(const BYTE* data, DWORD length, LONGLONG sampleTime, bool keyframe, LONGLONG queueDelay, LONGLONG deviceLatency);
             void RaiseLog(const wchar_t* message);
             void RaiseAudio(const BYTE* data, DWORD length, LONGLONG sampleTime);
+            void ReportCallbackError(const wchar_t* what, int hr);
 
         private:
             void Init(Windows::Media::MediaProperties::IMediaEncodingProperties^ videoProperties,
                       Windows::Media::MediaProperties::IMediaEncodingProperties^ audioProperties);
             Microsoft::WRL::ComPtr<EncodedMediaSink> _sink;
             bool _hooked;
+            int _callbackErrors = 0;
         };
     }
 }

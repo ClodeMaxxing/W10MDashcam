@@ -37,6 +37,19 @@ namespace W10MSecurityCam.Streaming
         // Last values read back (for /status)
         public string State = "";
 
+        // ---- camera power saving (less processing and heat; each part can be switched off)
+        public bool SaveOis = true, SaveFocus = true;
+        public bool SaveAll
+        {
+            get { return SaveOis && SaveFocus; }
+            set { SaveOis = SaveFocus = value; }
+        }
+        public bool OisSupported;
+        public bool TorchSupported, TorchPowerSupported;
+        /// <summary>True while the lens is parked where a single autofocus left it (automatic focus stays selected).</summary>
+        public bool FocusHeld;
+        private OpticalImageStabilizationMode? _origOis;
+
         public void Describe(MediaCapture cap)
         {
             var vdc = cap.VideoDeviceController;
@@ -85,8 +98,82 @@ namespace W10MSecurityCam.Streaming
                 if (iso.Supported) parts.Add("ISO " + iso.Min + "-" + iso.Max);
             }
             catch { }
+            try
+            {
+                var c = vdc.OpticalImageStabilizationControl;
+                OisSupported = c.Supported;
+                if (OisSupported) { if (_origOis == null) _origOis = c.Mode; parts.Add("stabilization " + c.Mode + " (" + string.Join("/", c.SupportedModes) + ")"); }
+            }
+            catch (Exception ex) { parts.Add("stabilization: " + ex.Message.Trim()); }
+            try
+            {
+                var tc = vdc.TorchControl;
+                TorchSupported = tc.Supported; TorchPowerSupported = tc.Supported && tc.PowerSupported;
+                parts.Add(TorchSupported ? "flashlight " + (TorchPowerSupported ? "adjustable" : "on/off only") : "flashlight: not offered");
+            }
+            catch (Exception ex) { TorchSupported = TorchPowerSupported = false; parts.Add("flashlight: " + ex.Message.Trim()); }
             Log("Camera controls: " + string.Join(", ", parts));
         }
+
+        /// <summary>
+        /// Sets the power-saving camera feature: optical stabilization off (or back to what the camera had). The Lumia 950 offers
+        /// no HDR video or noise reduction control. Call it while no recording is running; the stream then starts with this mode.
+        /// </summary>
+        public void ApplyPower(MediaCapture cap)
+        {
+            if (cap == null) return;
+            var vdc = cap.VideoDeviceController;
+            var done = new System.Collections.Generic.List<string>();
+            if (OisSupported) try
+            {
+                var c = vdc.OpticalImageStabilizationControl;
+                if (c.Supported)
+                {
+                    var want = SaveOis ? OpticalImageStabilizationMode.Off : (_origOis ?? OpticalImageStabilizationMode.Auto);
+                    if (c.SupportedModes.Contains(want) && c.Mode != want) c.Mode = want;
+                    done.Add("stabilization " + c.Mode);
+                }
+            }
+            catch (Exception ex) { Log("Stabilization: " + ex.Message.Trim()); }
+            Log("Camera power saving: " + (done.Count > 0 ? string.Join(", ", done) : "nothing adjustable") +
+                (SaveFocus ? ", focus held once settled" : ", continuous focus"));
+        }
+
+        /// <summary>
+        /// Power saving: run the autofocus once, then park the lens there. Automatic focus stays selected (the lens is simply
+        /// not hunting all day). Press Focus once, or restart the stream, to aim again.
+        /// </summary>
+        public async Task<bool> HoldFocusAsync(MediaCapture cap)
+        {
+            if (cap == null || !FocusSupported || !FocusAuto) return false;
+            try
+            {
+                // Watch the continuous autofocus for 8 s. Only park the lens when it has clearly settled away from the end stops:
+                // a single autofocus run was seen to report "0" (nearest) and would have left the picture blurry.
+                var f = cap.VideoDeviceController.FocusControl;
+                var samples = new System.Collections.Generic.List<uint>();
+                for (int i = 0; i < 8; i++) { await Task.Delay(1000); samples.Add(f.Value); }
+                var tail = samples.Skip(3).OrderBy(x => x).ToList();
+                double span = Math.Max(1, FocusMax - FocusMin);
+                uint lo = tail.First(), hi = tail.Last(), mid = tail[tail.Count / 2];
+                if (hi - lo > span * 0.05 || mid <= FocusMin + span * 0.02)
+                {
+                    Log("Hold focus: not settled yet (lens readings " + string.Join(", ", samples) + ") - will try again later");
+                    return false;
+                }
+                if (f.SupportedFocusModes.Contains(FocusMode.Manual))
+                    f.Configure(new FocusSettings { Mode = FocusMode.Manual, Value = mid, DisableDriverFallback = false });
+                await f.SetValueAsync(mid);
+                FocusHeld = true;
+                _aFocusAuto = true;
+                Log("Focus held at " + mid + " (power saving: the lens stops hunting; Focus once or a stream restart re-aims it)");
+                return true;
+            }
+            catch (Exception ex) { Log("Hold focus: " + ex.Message.Trim()); return false; }
+        }
+
+        /// <summary>Back to continuous autofocus on the next apply.</summary>
+        public void ReleaseFocusHold() { FocusHeld = false; _aFocusAuto = null; }
 
         // What was last sent to the camera, so a change only touches the control that changed
         // (repeated driver calls while recording were causing errors).
@@ -119,7 +206,8 @@ namespace W10MSecurityCam.Streaming
         {
             if (cap == null) return;
             var vdc = cap.VideoDeviceController;
-            if (force) { _aFocusAuto = _aExposureAuto = _aWbAuto = null; }
+            if (force) { _aFocusAuto = _aExposureAuto = _aWbAuto = null; FocusHeld = false; }
+            if (!FocusAuto) FocusHeld = false;
 
             if (FocusSupported)
             {
@@ -266,7 +354,7 @@ namespace W10MSecurityCam.Streaming
             var s = new System.Text.StringBuilder();
             try { if (ExposureSupported) s.AppendFormat("exposure {0:0.##} ms{1}", vdc.ExposureControl.Value.TotalMilliseconds, vdc.ExposureControl.Auto ? " (auto)" : ""); } catch { }
             try { var iso = vdc.IsoSpeedControl; if (iso.Supported) s.Append(", ISO ").Append(iso.Value); } catch { }
-            try { if (FocusSupported) s.Append(", focus ").Append(vdc.FocusControl.Value).Append(" (").Append(vdc.FocusControl.Mode).Append(")"); } catch { }
+            try { if (FocusSupported) s.Append(", focus ").Append(vdc.FocusControl.Value).Append(" (").Append(FocusHeld ? "held" : vdc.FocusControl.Mode.ToString()).Append(")"); } catch { }
             try { if (WhiteBalanceSupported) s.Append(", white balance ").Append(vdc.WhiteBalanceControl.Value).Append(" K (").Append(vdc.WhiteBalanceControl.Preset).Append(")"); } catch { }
             State = s.ToString().TrimStart(',', ' ');
         }

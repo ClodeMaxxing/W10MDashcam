@@ -31,7 +31,7 @@ Give the phone a fixed address (a DHCP reservation in the router), so the NVR al
 LumiaCam's settings once, the first time version 1.2 or later starts. You can change them in the app.
 
 **4K:** 4K30 works over the home Wi-Fi: 45-second tests at 8, 12, 16 and 24 Mbps all ran at a full 30 fps with no
-lost packets (about 7, 11, 15 and 22 Mbps on the wire). How much bitrate 4K needs depends on the scene; 12â€“16 Mbps
+lost packets (about 7, 11, 15 and 22 Mbps on the wire). How much bitrate 4K needs depends on the scene; 12-16 Mbps
 is a sensible start for a view with some motion. The NVR has to decode 4K continuously, and the phone runs warmer.
 
 The Lumia's encoder sends a keyframe every second whatever the "Keyframe every" setting says
@@ -39,25 +39,47 @@ above 1 s. This costs a little bandwidth, nothing else.
 
 ## Settings page and camera controls
 
-Open `http://PHONE-IP:5001/camera` in any browser. It has four sections, the same as the phone screen:
+Open `http://PHONE-IP:5001/camera` in any browser. The page and the phone screen share one look (black with green
+accents, version number at the top right) and the same sections. Click a header to fold its section; the web page
+remembers the choice in that browser. Explanations sit behind small (i) icons: hover or tap them.
 
-- **Status:** streaming state, fps, Mbps, viewers, battery % and charging state, Wi-Fi bars, memory, uptime, Windows
-  Battery Saver state. A red warning appears for a low battery or a charger that is too weak.
-- **Video:** resolution/fps, bitrate, high bandwidth mode, Start/Stop stream, and the stream addresses (Wi-Fi and USB).
+- **Status:** a card with the state (Streaming / Stopped / Heat protection, with a pulsing dot), resolution, uptime and
+  viewer count, large fps and Mbps figures, and tiles with graphs: battery bar, Wi-Fi bars, temperature badge (Healthy /
+  Unstable), phone and app CPU, app memory, engine badge (Fast / Safe mode), encoder latency, and power (watts into or
+  out of the battery on a 0-15 W bar). A tile turns amber or red when it needs attention. An amber notice appears while
+  the default login is in use, a red one for heat.
+- **Video:** resolution/fps, bitrate and a **High BW** toggle on one line, Start/Stop stream, and **Stream addresses**,
+  a pop-up with the Wi-Fi and USB stream addresses, this page over USB and the live log.
   Changing resolution or bitrate starts the stream, or restarts it if it is running.
-- **Camera:** Automatic focus, exposure and white balance (one master box, plus a box and slider for each), and
-  **Focus once and lock**. Leave everything on Auto for a camera that follows the daylight. Manual sliders pause the
-  blackout and show the picture so you can see what you are doing.
-- **Power:** one button that blacks out the phone screen (brightness to zero, black screen, preview off). The phone
-  screen has the same button.
+- **Camera:** Automatic focus, exposure and white balance (one master box, plus a box and slider for each), **Focus once
+  and lock**, and the **flashlight** (only while streaming; it switches itself off after 30 seconds because the LED heats
+  the phone fast, and it cannot be dimmed on this phone). Leave everything on Auto for a camera that follows the daylight.
+- **Power:** one button that blacks out the phone screen, and the **Power-saving camera features** box (stabilization
+  off for a fixed mount, hold focus once it has settled; untick the box to choose each). Changing stabilization restarts
+  the stream once.
+
+**The phone screen while streaming** is black with the preview off, whatever you change on the web page. The main
+screen holds Start/Stop, the status card, **Show camera picture (60 s)**, **Black out the screen now** and any warning;
+Video, Camera, Power, Network and login, and Details and log fold away. Tapping the black screen shows the status for
+15 seconds with no restart. **Show camera picture** (or touching a camera control) shows the picture until 60 seconds
+after your last touch; **Black out the screen now** ends it straight away. The preview can only start or stop while the
+stream is stopped (changing it mid-stream stalled the 4K pipeline), so each of these restarts the stream once, a gap of
+a second or two for the NVR. Keeping the preview running behind the black screen was measured and rejected: it doubled
+the app's CPU use (12% to 24%) and raised the battery draw. The start/stop chirp is Windows' own recording sound; it
+follows the phone's Ringer + notifications volume.
 
 Everything on the page needs the login (see Login below). Over the USB cable no login is needed.
 
 **High bandwidth mode** unlocks bitrates above 24 Mbps (up to 60). It needs 5 GHz Wi-Fi or a USB-C connection; at
 60 Mbps on 2.4 GHz the stream drops frames. Auto bitrate is capped at 16 Mbps (40 Mbps in high bandwidth mode).
 
-**Temperature:** Windows 10 Mobile gives apps no temperature reading. The status block shows an indirect hint
-instead: a warning if the frame rate stays well below the selected rate (heat, dim light or an overloaded link).
+**Temperature and heat protection:** Windows 10 Mobile gives apps no temperature reading, and the frame rate does not
+show heat (it stayed at 25 fps while Windows warned of overheating). The app uses the charging state instead: if
+charging pauses ("Idle") on a charger Windows reports as adequate, with the battery below 95%, for 20 seconds, the
+temperature reads **Unstable** and *heat protection* switches on. It forces the power-saving options on (screen blackout,
+preview off, stabilization off, held focus), lowers the video to 1080p at 6 Mbps (restored afterwards), locks the flashlight and shows a red warning on the phone and the web page.
+After 30 seconds of charging again your own settings come back; the flashlight stays off but can be used again.
+Windows can still stop the app first if it overheats quickly; the app then restarts into heat protection.
 
 **Safe mode:** after a crash or two stalls the app uses the slower MP4 engine, limited to 1080p. The page says so and
 offers **Return to normal mode**.
@@ -122,6 +144,30 @@ second or two). The list of formats the camera offers is shown by `/config`.
 - Use a wall charger rather than a PC USB port, and keep the phone out of direct sun.
 - Watch `/status` from your NVR or monitoring tool.
 - `/status` and the log warn when the phone is not charging or the battery is low.
+- The original 15 W (5 V) charger is the limit: 4K streaming uses several watts, so the battery only gains slowly.
+  The Power line shows the real balance. To use less power and make less heat, lower the resolution, frame rate or
+  bitrate, keep the power-saving options on, and change these phone settings (an app cannot change them):
+  turn on Battery Saver, turn off background apps, use airplane mode with Wi-Fi switched back on, turn off Bluetooth,
+  NFC and location, turn off "Hey Cortana" and the glance screen, turn off sync and automatic app and map updates,
+  use 5 GHz Wi-Fi, close every other app, and switch Device Portal off when you do not need it.
+
+## Soak testing
+
+`tools\Soak-Monitor.ps1` records the camera's status on the PC for as long as it runs:
+
+```
+powershell -ExecutionPolicy Bypass -File tools\Soak-Monitor.ps1                 (phone address from tools\phone-ip.txt)
+powershell -ExecutionPolicy Bypass -File tools\Soak-Monitor.ps1 -Every 15 -User admin -Password secret
+```
+
+Every sample (default 30 s) goes to `tools\soak\soak-DATE.csv`: streaming, fps, Mbps, viewers, format, engine,
+latency, battery %, charging, watts, heat, heat protection, phone and app CPU, memory, Wi-Fi, uptime, screen and
+preview state, and the busiest GPU engine if Device Portal is paired (`tools\Monitor-Portal.ps1 -Pair PIN`). A sample
+the phone does not answer is recorded as unreachable. Next to it, `soak-DATE.html` shows a graph of each metric over
+time (hover for values) and a summary: phone reachable %, streaming %, app restarts, stream stops, fps average and
+minimum, time with a heat warning or in heat protection, battery minimum, and the memory trend in MB per hour (a slow
+leak shows there). The page reloads itself every minute while the monitor runs. Stop with Ctrl+C; `-Csv FILE`
+continues an earlier run and `-ReportOnly -Csv FILE` redraws a report.
 
 ## Install a release
 
@@ -143,6 +189,8 @@ Bump `Version` in `W10MSecurityCam/Package.appxmanifest` for every install, or t
 | `tools\Test-USB-Video.cmd` | Same test over USB |
 | `tools\test-rtsp.ps1` | The test itself: `-Seconds`, `-User`/`-Password`, `-Udp`, `-NoSave` (long runs), `-Abrupt`, `-NoAudio`. Saves video to `.h264` and audio to `.aac` |
 | `tools\check-http.ps1`, `tools\check-snapshot.ps1` | Check the web endpoints / fetch snapshots |
+| `tools\Soak-Monitor.ps1` | Long-run recorder: samples every status value every 30 s to `tools\soak\*.csv` and keeps an HTML report with graphs of each metric over time and a summary (availability, restarts, heat time, fps, memory trend). See *Soak testing* above |
+| `tools\Monitor-Portal.ps1` | Logs whole-phone CPU, GPU and battery from Device Portal once a minute (`-Pair PIN` first) |
 | `tools\Remove-Dead-IpOverUsb-Keys.cmd` | Optional, run as admin: deletes the unused `LumiaCam*` IP-over-USB registry entries |
 
 Put the phone's IP address in `tools\phone-ip.txt` (one line, not committed) for the Wi-Fi fallback and the test scripts. `tools\autotest\Run-Next.cmd`
