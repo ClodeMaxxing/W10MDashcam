@@ -118,6 +118,8 @@
     <Content Include="Assets\Wide310x150Logo.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\SplashScreen.png" />
+    <Content Include="Assets\ClipSaved.wav" />
+    <Content Include="Assets\ClipNone.wav" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">

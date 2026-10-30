@@ -4,6 +4,8 @@ using System.Globalization;
 using System.Threading.Tasks;
 using Windows.Data.Json;
 using Windows.Foundation.Metadata;
+using Windows.Media.Core;
+using Windows.Media.Playback;
 using Windows.Storage.AccessCache;
 using Windows.Storage.Pickers;
 using Windows.UI.Core;
@@ -60,6 +62,7 @@ namespace W10MDashcam
             SelectChoice(LimitBox, gb);
             _loadingRecUi = false;
             HookCameraButton();
+            _recorder.ClipResult += (ok, text) => { var _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => OnClipResult(ok, text)); };
         }
 
         private void SetRecorderLimits(int segmentMin, int limitGb)
@@ -153,16 +156,92 @@ namespace W10MDashcam
             catch (Exception ex) { Log("Camera button not available: " + ex.Message); }
         }
 
-        private async void OnCameraButton(object sender, Windows.Phone.UI.Input.CameraEventArgs e)
+        private void OnCameraButton(object sender, Windows.Phone.UI.Input.CameraEventArgs e)
+        {
+            var _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => RequestSaveClip("camera button"));
+        }
+
+        // ---------------------------------------------------------------- Save clip feedback
+
+        private bool _clipSaving;
+        private DateTime _clipSavingSince;
+        private bool _clipOk;
+        private string _clipText = "";
+        private DateTime _clipShowUntil = DateTime.MinValue;
+        private MediaPlayer _chime;
+
+        /// <summary>
+        /// Save clip from the on-screen button or the camera button: a buzz at once, "SAVING..." on the button, then -
+        /// when the current file has been finished (next keyframe, within ~2 s) - a chime and "CLIP SAVED".
+        /// The camera keeps running: the next file starts with no gap.
+        /// </summary>
+        private async void RequestSaveClip(string from)
         {
             try
             {
-                bool recording = _recorder.State == "recording";
-                if (recording) _recorder.SaveClip();
-                else Log("Camera button: not recording - nothing to save");
-                await BuzzAsync(recording ? 1 : 2);
+                if (_recorder.State != "recording")
+                {
+                    Log("Save clip (" + from + "): not recording - nothing to save");
+                    OnClipResult(false, "Not recording - nothing to save");
+                    await BuzzAsync(2);
+                    return;
+                }
+                if (!_clipSaving)
+                {
+                    _clipSaving = true;
+                    _clipSavingSince = DateTime.Now;
+                    _recorder.SaveClip();
+                }
+                UpdateRecordingUi();
+                await BuzzAsync(1);
             }
-            catch (Exception ex) { Log("Camera button: " + ex.Message); }
+            catch (Exception ex) { Log("Save clip: " + ex.Message); }
+        }
+
+        private void OnClipResult(bool ok, string text)
+        {
+            _clipSaving = false;
+            _clipOk = ok;
+            _clipText = ok ? "Clip saved (" + text + ") - a new file has started" : text;
+            _clipShowUntil = DateTime.Now.AddSeconds(5);
+            PlayChime(ok);
+            UpdateRecordingUi();
+        }
+
+        /// <summary>A short sound from the app's own files (media volume).</summary>
+        private void PlayChime(bool ok)
+        {
+            try
+            {
+                if (_chime == null) _chime = new MediaPlayer { AudioCategory = MediaPlayerAudioCategory.SoundEffects, Volume = 1.0 };
+                _chime.Source = MediaSource.CreateFromUri(new Uri(ok ? "ms-appx:///Assets/ClipSaved.wav" : "ms-appx:///Assets/ClipNone.wav"));
+                _chime.Play();
+            }
+            catch (Exception ex) { Log("Chime: " + ex.Message); }
+        }
+
+        private void UpdateSaveButton(bool recording)
+        {
+            if (_clipSaving && (DateTime.Now - _clipSavingSince).TotalSeconds > 8) _clipSaving = false; // never stick
+            bool showing = DateTime.Now < _clipShowUntil;
+            if (_clipSaving)
+            {
+                SaveClipButton.Content = "SAVING...";
+                SaveClipButton.Background = Brush(0x5A, 0x4A, 0x10);
+                SaveClipButton.IsEnabled = false;
+            }
+            else if (showing)
+            {
+                SaveClipButton.Content = _clipOk ? "CLIP SAVED \u2713" : "NOTHING SAVED";
+                SaveClipButton.Background = _clipOk ? Brush(0x14, 0x5A, 0x20) : Brush(0x33, 0x33, 0x33);
+                SaveClipButton.IsEnabled = recording;
+            }
+            else
+            {
+                SaveClipButton.Content = "SAVE CLIP";
+                SaveClipButton.Background = Brush(0x5A, 0x10, 0x10);
+                SaveClipButton.IsEnabled = recording;
+            }
         }
 
         private static async Task BuzzAsync(int times)
@@ -183,7 +262,7 @@ namespace W10MDashcam
 
         // ---------------------------------------------------------------- controls
 
-        private void SaveClipButton_Click(object sender, RoutedEventArgs e) => _recorder.SaveClip();
+        private void SaveClipButton_Click(object sender, RoutedEventArgs e) => RequestSaveClip("button");
 
         private void RecordOnOpenToggle_Toggled(object sender, RoutedEventArgs e)
         {
@@ -269,8 +348,8 @@ namespace W10MDashcam
                 : r.State == "error" ? Windows.UI.Color.FromArgb(255, 0xFF, 0xA0, 0x20) : Windows.UI.Color.FromArgb(255, 0x55, 0x55, 0x55));
             RecStateText.Text = rec ? "REC " + TimeSpan.FromSeconds(Math.Floor(r.CurrentSeconds)).ToString(@"m\:ss")
                 : !r.Enabled ? "NOT RECORDING" : r.State.ToUpperInvariant();
-            RecInfoText.Text = RecordingSummary();
-            SaveClipButton.IsEnabled = rec;
+            RecInfoText.Text = DateTime.Now < _clipShowUntil ? _clipText : RecordingSummary();
+            UpdateSaveButton(rec);
             LocationText.Text = string.IsNullOrEmpty(r.Location) ? "Decided when recording starts" : "Now: " + r.Location;
             UpdateRunButtons();
         }

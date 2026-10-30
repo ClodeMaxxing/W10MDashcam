@@ -112,6 +112,18 @@ namespace W10MDashcam.Recording
         public long MaxWriteMs { get; private set; }
         public int SavedClips { get; private set; }
         public string LastError { get; private set; } = "";
+        /// <summary>
+        /// Result of Save clip (raised on the recorder's thread): true + what was kept once the clip's file is finished,
+        /// or false + why nothing could be saved.
+        /// </summary>
+        public event Action<bool, string> ClipResult;
+        private bool _cutRequested;      // Save clip: finish the current file at the next keyframe
+        private string _clipText;        // what the pending clip keeps, for ClipResult
+
+        private void RaiseClip(bool ok, string text)
+        {
+            try { ClipResult?.Invoke(ok, text); } catch { }
+        }
         private long _statBytes, _statTicks;
         private readonly Stopwatch _clock = Stopwatch.StartNew();
 
@@ -312,7 +324,7 @@ namespace W10MDashcam.Recording
             else if (f.Key)
             {
                 await FlushAsync(f.Time);
-                if (f.Time - _seg.Start >= SegmentSeconds * Second)
+                if (_cutRequested || f.Time - _seg.Start >= SegmentSeconds * Second)
                 {
                     await CloseAsync(f.Time);
                     if (!await OpenAsync(f.Time)) return;
@@ -413,7 +425,15 @@ namespace W10MDashcam.Recording
             long size = s.Writer.BytesWritten;
             Log(string.Format("Recording: {0} done ({1:0.0} min, {2:0.0} MB)", s.Name, s.Writer.Duration / (double)Second / 60, size / 1048576.0));
             if (State == "recording") State = Enabled ? "starting the next file" : "off";
-            if (s.Protect) await SaveOrQueueAsync(s.File);
+            if (s.Protect)
+            {
+                await SaveOrQueueAsync(s.File);
+                if (_cutRequested)
+                {
+                    _cutRequested = false;
+                    RaiseClip(true, _clipText ?? s.Name);
+                }
+            }
             else
             {
                 _segments.Add(new RecordingInfo { Name = s.Name, Size = size });
@@ -423,8 +443,16 @@ namespace W10MDashcam.Recording
             _lastClosedKnown = true;
         }
 
+        /// <summary>2026-10-30_15-23-42.mp4 -> 15:23:42</summary>
+        private static string ShortName(string name)
+        {
+            var m = Regex.Match(name ?? "", @"_(\d\d)-(\d\d)-(\d\d)");
+            return m.Success ? m.Groups[1].Value + ":" + m.Groups[2].Value + ":" + m.Groups[3].Value : name;
+        }
+
         private async Task SaveAsync()
         {
+            if (_cutRequested && _seg != null) { Log("Save clip: already saving"); return; }
             await EnsureFoldersAsync();
             var kept = new List<string>();
             // The file just before the current one (the moments before) - only that one, and only once:
@@ -447,10 +475,25 @@ namespace W10MDashcam.Recording
                 }
                 catch (Exception ex) { Log("Save clip: " + prev.Name + ": " + ex.Message); }
             }
-            bool again = _seg != null && _seg.Protect && kept.Count == 0;
-            if (_seg != null) { _seg.Protect = true; kept.Add(_seg.Name + " (kept when it ends)"); }
-            Log(again ? "Clip already saved: " + _seg.Name + " (kept when it ends)"
-                : kept.Count > 0 ? "Clip saved: " + string.Join(", ", kept) : "Save clip: nothing recorded yet");
+            if (_seg != null)
+            {
+                // Finish the current file at the next keyframe (within ~2 s): it is saved, and a new file starts with no gap.
+                _seg.Protect = true;
+                _cutRequested = true;
+                kept.Add(_seg.Name);
+                _clipText = string.Join(" + ", kept.Select(ShortName));
+                Log("Save clip: keeping " + string.Join(", ", kept) + " - the current file ends now and a new one starts");
+            }
+            else if (kept.Count > 0)
+            {
+                Log("Clip saved: " + string.Join(", ", kept) + " (not recording now)");
+                RaiseClip(true, string.Join(" + ", kept.Select(ShortName)));
+            }
+            else
+            {
+                Log("Save clip: nothing recorded yet");
+                RaiseClip(false, "Not recording - nothing to save");
+            }
         }
 
         // ---- saved clips whose move is still pending: right after a file closes, the phone's media indexer
@@ -529,6 +572,7 @@ namespace W10MDashcam.Recording
 
         private async Task FailAsync(string message)
         {
+            if (_cutRequested) { _cutRequested = false; RaiseClip(false, "Clip not saved: " + message); }
             LastError = message;
             State = "error";
             Log(message);

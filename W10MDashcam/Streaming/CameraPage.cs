@@ -337,7 +337,7 @@ function recPost(path,body,msg){
  fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'W10MDashcam'},body:body||''})
  .then(function(r){return r.text()}).then(function(t){$('msg').textContent=msg||t;setTimeout(function(){load();recList()},800)});
 }
-$('rsave').onclick=function(){recPost('/recordings/save','','Clip saved: the current file and the one before it are kept')};
+$('rsave').onclick=function(){recPost('/recordings/save','','Saving: the current file ends now (and the one before it is kept too); a new file starts with no gap')};
 $('rref').onclick=recList;
 $('rbtn').onclick=function(){send('record='+(st&&st.recording&&st.recording.enabled?'off':'on'));setTimeout(recList,3000)};
 $('roo').onchange=function(){touched=Date.now();send('recordonopen='+(this.checked?'on':'off'))};
