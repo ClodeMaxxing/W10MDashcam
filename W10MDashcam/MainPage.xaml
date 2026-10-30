@@ -68,6 +68,18 @@
                 <!-- MAIN: what is needed day to day. Everything else folds away below. -->
                 <Button x:Name="StartButton" Content="Start streaming" HorizontalAlignment="Stretch"
                         Margin="0,0,0,6" Click="StartButton_Click" IsEnabled="False" />
+                <!-- Dashcam recording card: REC state, the Save clip button, storage summary. -->
+                <Border Background="#140707" BorderBrush="#3A1F1F" BorderThickness="1" CornerRadius="6" Padding="10,8,10,8" Margin="0,0,0,6">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="RecDot" Width="10" Height="10" Fill="#555555" VerticalAlignment="Center" Margin="0,0,7,0" />
+                            <TextBlock x:Name="RecStateText" Text="OFF" FontSize="13" FontWeight="SemiBold" Foreground="#F0B0B0" CharacterSpacing="60" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button x:Name="SaveClipButton" Content="SAVE CLIP" HorizontalAlignment="Stretch" FontWeight="Bold" Margin="0,6,0,4"
+                                Background="#5A1010" Foreground="#FFE0E0" BorderBrush="#A03030" Click="SaveClipButton_Click" IsEnabled="False" />
+                        <TextBlock x:Name="RecInfoText" Text="" FontSize="11" Foreground="#C9B0B0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
                 <!-- Status card: state dot and label, resolution and viewer pills, then the big numbers. -->
                 <Border Background="#07140B" BorderBrush="#1F3A26" BorderThickness="1" CornerRadius="6" Padding="10,8,10,8" Margin="0,0,0,6">
                     <StackPanel>
@@ -194,6 +206,14 @@
                 <Button x:Name="PowerSaveButton" Content="Black out the screen now" HorizontalAlignment="Stretch"
                         Margin="0,0,0,6" Click="PowerSaveButton_Click" />
 
+                <Button Style="{StaticResource FoldButton}" Tag="RecordingPanel|RECORDING" Content="RECORDING  &#x25B8;" Click="Fold_Click" />
+                <StackPanel x:Name="RecordingPanel" Visibility="Collapsed">
+                    <ToggleSwitch x:Name="RecordToggle" Header="Record to storage" IsOn="True" Toggled="RecordToggle_Toggled" />
+                    <ComboBox x:Name="SegmentBox" Header="New file every" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
+                    <ComboBox x:Name="LimitBox" Header="Space for loop recording" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
+                    <TextBlock Text="The oldest files are deleted to stay within this space. Saved clips (the current and the previous file) are never deleted. Recordings: on the web page at /camera." FontSize="11" Foreground="#7F9A86" TextWrapping="Wrap" Margin="0,0,0,6" />
+                </StackPanel>
+
                 <Button Style="{StaticResource FoldButton}" Tag="VideoPanel|VIDEO" Content="VIDEO  &#x25B8;" Click="Fold_Click" />
                 <StackPanel x:Name="VideoPanel" Visibility="Collapsed">
                     <TextBlock x:Name="VideoAlert" Text="THERMAL RECOVERY MODE: VIDEO LOWERED TO 1080P / 6 MBPS UNTIL CHARGING RESUMES" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
@@ -282,7 +302,7 @@
 
         <!-- Full black overlay: on an OLED screen black pixels are off, so this costs almost no power and avoids burn-in. -->
         <Border x:Name="BlackoutOverlay" Grid.ColumnSpan="2" Background="Black" Visibility="Collapsed" Tapped="BlackoutOverlay_Tapped">
-            <TextBlock Text="Streaming - tap to show controls" Foreground="#222" FontSize="12"
+            <TextBlock Text="Tap to show controls" Foreground="#222" FontSize="12"
                        HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8" />
         </Border>
     </Grid>

@@ -11,7 +11,12 @@ namespace W10MDashcam
             InitializeComponent();
         }
 
-        protected override void OnLaunched(LaunchActivatedEventArgs e)
+        protected override void OnLaunched(LaunchActivatedEventArgs e) => Show(e.Arguments);
+
+        /// <summary>The app is registered for .mp4 (to write to the SD card); opening a video with it just starts the app.</summary>
+        protected override void OnFileActivated(FileActivatedEventArgs args) => Show(null);
+
+        private static void Show(string arguments)
         {
             var rootFrame = Window.Current.Content as Frame;
             if (rootFrame == null)
@@ -21,7 +26,7 @@ namespace W10MDashcam
             }
             if (rootFrame.Content == null)
             {
-                rootFrame.Navigate(typeof(MainPage), e.Arguments);
+                rootFrame.Navigate(typeof(MainPage), arguments);
             }
             Window.Current.Activate();
         }

@@ -68,10 +68,29 @@ button.tog.on{background:#18452b;color:#39ff14;border-color:#39ff14;box-shadow:0
 .addr{margin:8px 0}.addr b{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6f8f77}
 .addr code{display:block;font-family:Consolas,'Cascadia Mono',monospace;font-size:13px;color:#e4f5e7;background:#030805;border:1px solid #16301e;border-radius:4px;padding:6px 8px;margin-top:3px;word-break:break-all;user-select:all}
 .bad{color:#ff6b6b;font-size:13px;margin-top:4px}
+.dot.rec{background:#ff3030;box-shadow:0 0 8px #ff3030;animation:pulse 1s ease-in-out infinite}
+.state.rec{color:#ff8a8a}
+button.save{background:#5a1010;color:#ffe0e0;border-color:#a03030;font-weight:bold;width:100%}
+button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,48,48,.4)}
+.files{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.files td{border-top:1px solid #16301e;padding:5px 3px;vertical-align:middle}
+.files td.n{font-family:Consolas,'Cascadia Mono',monospace;color:#e4f5e7;word-break:break-all}
+.files td.s{color:#7f9a86;white-space:nowrap;text-align:right}
+.files a{color:#9cf0b0;margin-left:6px}.files a.x{color:#ff8a8a;cursor:pointer}
+.tag{font-size:10px;border-radius:8px;padding:0 6px;margin-left:4px;border:1px solid #2e7d46;color:#39ff14}
+.tag.r{border-color:#a03030;color:#ff8a8a}
 </style></head><body>
 <h1><span>W10MDashcam</span><span id='ver'></span></h1>
 <h2>Status</h2>
 <div class='row'><div id='stat'>loading...</div><div id='warn'></div></div>
+<h2>Recordings</h2>
+<div class='row'><div class='card'>
+<div class='top'><span class='dot' id='rdot'></span><span class='state' id='rstate'>-</span><span class='pill r' id='rloc'></span></div>
+<button class='save' id='rsave' data-tip='Keeps the file being recorded and the one before it in the Saved folder, where loop recording never deletes them.'>SAVE CLIP</button>
+<div class='sub' id='rinfo' style='margin:6px 0 0'></div></div>
+<div class='vrow' style='margin-top:8px'><label><input type='checkbox' id='ron'> Record</label><select id='rseg'></select><select id='rlim'></select></div>
+<div class='btnrow' style='margin-top:6px'><button id='rref'>Refresh list</button><span class='sub' style='margin:0'>Tap a name to play it here, Download to save it.</span></div>
+<table class='files' id='rlist'></table></div>
 <h2>Video</h2>
 <div class='bad' id='ta3' style='display:none;font-weight:bold'>THERMAL RECOVERY MODE: video lowered to 1080p / 6 Mbps until charging resumes</div>
 <div class='row'>
@@ -275,7 +294,54 @@ $('ws').oninput=function(){touched=Date.now();labels();later('wb='+this.value)};
  document.addEventListener('click',function(e){var n=find(e);if(n&&(' '+n.className+' ').indexOf(' tip ')>=0){show(n);e.preventDefault();e.stopPropagation()}else if(!n)hide()},true);
  window.addEventListener('scroll',hide,true);
 })();
-load();setInterval(load,3000);
+// ---- dashcam recordings
+function mb(b){return b>=1073741824?(b/1073741824).toFixed(1)+' GB':Math.max(1,Math.round(b/1048576))+' MB'}
+function hms(s){s=Math.floor(s||0);var m=Math.floor(s/60);s=s%60;return m+':'+(s<10?'0':'')+s}
+function esc(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;')}
+var segs=[1,3,5,10],lims=[4,8,16,32,64,0];
+function recRender(){
+ var r=st&&st.recording;if(!r)return;
+ var on=r.state=='recording';
+ $('rdot').className='dot'+(on?' rec':'');$('rstate').className='state'+(on?' rec':'');
+ $('rstate').textContent=on?'REC '+hms(r.seconds):r.state;
+ $('rloc').textContent=r.location?r.location.split(' (')[0]:'';
+ var i=r.error&&r.state=='error'?r.error:(r.files+' loop files, '+mb(r.usedMB*1048576)+(r.freeMB!=null?', '+mb(r.freeMB*1048576)+' free':'')+(r.saved?', '+r.saved+' saved':''));
+ if(r.dropped)i+=' - '+r.dropped+' frames dropped (storage too slow)';
+ if(on&&r.writeMBps)i+=' - writing '+r.writeMBps.toFixed(1)+' MB/s';
+ $('rinfo').textContent=r.enabled?i:'Recording is off';
+ $('rsave').disabled=!st.canWrite||!on;
+ if(Date.now()-touched<2500)return;
+ fill($('rseg'),segs,function(v){return 'New file every '+v+' min'});
+ fill($('rlim'),lims,function(v){return v?'Keep up to '+v+' GB':'Use all free space'});
+ $('ron').checked=r.enabled;$('rseg').value=r.segmentMin;$('rlim').value=r.limitGB;
+ $('ron').disabled=$('rseg').disabled=$('rlim').disabled=!st.canWrite;
+}
+function recList(){
+ fetch('/recordings').then(function(r){return r.json()}).then(function(j){
+  var h='';
+  j.files.forEach(function(f){
+   var q='/recordings/file?name='+encodeURIComponent(f.name)+(f.saved?'&saved=1':'');
+   h+='<tr><td class=n><a style=margin:0 href='+q+' target=_blank>'+esc(f.name.replace('.mp4','').replace(/^(\d{4}-\d\d-\d\d)_(\d\d)-(\d\d)-(\d\d)/,'$1 $2:$3:$4'))+'</a>'
+    +(f.saved?'<span class=tag>saved</span>':'')+(f.recording?'<span class=""tag r"">recording</span>':'')+'</td>'
+    +'<td class=s>'+mb(f.size)+'</td><td class=s><a href='+q+'&dl=1>Download</a>'
+    +(f.recording||!(st&&st.canWrite)?'':'<a class=x data-n='+encodeURIComponent(f.name)+' data-s='+(f.saved?1:0)+'>Delete</a>')+'</td></tr>';
+  });
+  $('rlist').innerHTML=h||'<tr><td class=s style=text-align:left>No recordings yet</td></tr>';
+ }).catch(function(){});
+}
+function recPost(path,body,msg){
+ fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'W10MDashcam'},body:body||''})
+ .then(function(r){return r.text()}).then(function(t){$('msg').textContent=msg||t;setTimeout(function(){load();recList()},800)});
+}
+$('rsave').onclick=function(){recPost('/recordings/save','','Clip saved: the current file and the one before it are kept')};
+$('rref').onclick=recList;
+$('ron').onchange=function(){touched=Date.now();send('record='+(this.checked?'on':'off'))};
+$('rseg').onchange=function(){touched=Date.now();send('segment='+this.value)};
+$('rlim').onchange=function(){touched=Date.now();send('storage='+(this.value=='0'?'all':this.value))};
+$('rlist').onclick=function(e){var a=e.target;if(!a.getAttribute||!a.getAttribute('data-n'))return;
+ var n=decodeURIComponent(a.getAttribute('data-n'));if(!confirm('Delete '+n+'?'))return;
+ recPost('/recordings/delete','name='+encodeURIComponent(n)+'&saved='+a.getAttribute('data-s'),'Deleted '+n)};
+load();setInterval(load,3000);setInterval(recRender,1000);recList();setInterval(recList,20000);
 </script></body></html>";
     }
 }

@@ -170,6 +170,8 @@ namespace W10MDashcam
             AudioToggle.IsOn = _audioOn;
             LoadSaveUi();
             LoadTorchUi();
+            LoadRecordingSettings();
+            _api.Recorder = _recorder;
 
             Application.Current.Suspending += OnSuspending;
             Application.Current.Resuming += OnResuming;
@@ -198,6 +200,7 @@ namespace W10MDashcam
                 _camera.ParameterSetsReady += _server.SetParameterSets;
                 _camera.AudioFrameReady += _server.SendAudio;
                 _camera.AudioFormatReady += _server.SetAudioFormat;
+                WireRecorder(_camera);
                 await _camera.InitializeAsync();
 
                 var formats = _camera.GetRecordFormats();
@@ -397,6 +400,7 @@ namespace W10MDashcam
                 else
                 {
                     await _camera.StopStreamingAsync();
+                    _recorder.EndSegment();
                     ClearStartFlag();
                     StopUi();
                     await ApplyBlackoutAsync();
@@ -406,6 +410,7 @@ namespace W10MDashcam
             {
                 Log("ERROR: " + ex.Message);
                 try { await _camera.StopStreamingAsync(); } catch { }
+                _recorder.EndSegment();
                 ClearStartFlag();
                 StopUi();
             }
@@ -650,6 +655,7 @@ namespace W10MDashcam
         private void UpdateStats()
         {
             if ((DateTime.Now - _appStarted).TotalSeconds > 20) MarkLaunchHealthy();
+            UpdateRecordingUi();
             // a preview left running behind the black screen (its stop restart was skipped while busy) is stopped on a later tick
             if (!_blackedOut) UpdatePreviewText();
             // The preview does not match what is wanted (a restart was skipped while another one ran): fix it with one restart.
@@ -835,6 +841,7 @@ namespace W10MDashcam
             {
                 _statsTimer.Stop();
                 if (_camera != null) await _camera.ShutdownAsync();
+                await _recorder.ShutdownAsync(); // finish the file so it is complete
                 _camera = null;
                 ClearStartFlag(); // a clean suspend is not a crash
                 MarkLaunchHealthy();
@@ -1546,6 +1553,7 @@ namespace W10MDashcam
             o["wb"] = JsonValue.CreateNumberValue(_tuning.WhiteBalanceKelvin);
             o["wbMin"] = JsonValue.CreateNumberValue(_tuning.WbMin > 0 ? _tuning.WbMin : 2000);
             o["wbMax"] = JsonValue.CreateNumberValue(_tuning.WbMax > _tuning.WbMin ? _tuning.WbMax : 8000);
+            AddRecordingJson(o);
             return o.Stringify();
         }
 
@@ -1590,6 +1598,7 @@ namespace W10MDashcam
             int bars = WifiBars();
             o["wifiSignalBars"] = bars >= 0 ? JsonValue.CreateNumberValue(bars) : JsonValue.CreateNullValue();
             o["time"] = JsonValue.CreateStringValue(DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"));
+            AddRecordingJson(o);
             return o.Stringify();
         }
 
@@ -1623,6 +1632,7 @@ namespace W10MDashcam
                 _settings.Values["AllowBasic"] = _server.Auth.AllowBasic;
                 done.Add("basic " + (_server.Auth.AllowBasic ? "on" : "off"));
             }
+            await ApplyRecordingConfigAsync(form, done);
             await ApplyExtraConfigAsync(form, done);
             string summary = done.Count > 0 ? "Changed: " + string.Join(", ", done) : "Nothing changed";
             Log("Config over USB: " + summary);
@@ -1634,6 +1644,7 @@ namespace W10MDashcam
 
         private string ExtraConfigText() =>
             // Runs on a network thread: only cached strings here, never the on-screen controls.
+            RecordingConfigText() +
             "format=" + (_currentFormat ?? (_settings.Values["Format"] as string ?? "")) + "\n" +
             "bitrate=" + (_currentBitrate ?? "") + "\n" +
             "highbw=" + (_highBw ? "on" : "off") + " (bitrates above 24 Mbps need it; use 5 GHz Wi-Fi or USB-C)\n" +
@@ -1649,7 +1660,7 @@ namespace W10MDashcam
             "snapshot=" + (_snapshotsOn ? "on" : "off") +
             (_camera != null ? (_camera.PhotoWhileRecordingSupported ? "" : " (this camera can't take photos while recording)") : "") + "\n";
 
-        private string ExtraConfigHelp() => ", stream=start|stop|restart, engine=normal, probe=devices|power, powersave=on|off, savepower=on|off, saveois|savefocus=on|off, torch=on|off, focus=once, highbw=on|off, camera=auto|manual, focus=auto|manual|0-100, exposure=auto|manual|MS, wb=auto|manual|KELVIN, format=WIDTHxHEIGHT@FPS, bitrate=MBPS|auto, audio=on|off, udp=on|off, snapshot=on|off";
+        private string ExtraConfigHelp() => ", stream=start|stop|restart, engine=normal, probe=devices|power, powersave=on|off, savepower=on|off, saveois|savefocus=on|off, torch=on|off, focus=once, highbw=on|off, camera=auto|manual, focus=auto|manual|0-100, exposure=auto|manual|MS, wb=auto|manual|KELVIN, format=WIDTHxHEIGHT@FPS, bitrate=MBPS|auto, audio=on|off, udp=on|off, snapshot=on|off" + RecordingConfigHelp;
 
         private static string FormatKey(FormatOption f) => f.Width + "x" + f.Height + "@" + Math.Round(f.Fps);
 

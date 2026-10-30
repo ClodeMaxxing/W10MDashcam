@@ -5,7 +5,7 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   IgnorableNamespaces="uap mp">
 
-  <Identity Name="W10MDashcam" Publisher="CN=W10MDashcam" Version="0.1.0.0" />
+  <Identity Name="W10MDashcam" Publisher="CN=W10MDashcam" Version="0.2.1.0" />
   <mp:PhoneIdentity PhoneProductId="60271e4c-4d82-4723-93d2-d56048599a2b" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
@@ -36,12 +36,24 @@
           <uap:Rotation Preference="landscape"/>
         </uap:InitialRotationPreference>
       </uap:VisualElements>
+      <Extensions>
+        <!-- Needed to write recordings to the SD card (removable storage only gives access to declared file types). -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="dashcamvideo">
+            <uap:DisplayName>Dashcam video</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType ContentType="video/mp4">.mp4</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
 
   <Capabilities>
     <Capability Name="internetClientServer" />
     <Capability Name="privateNetworkClientServer" />
+    <uap:Capability Name="removableStorage" />
     <DeviceCapability Name="webcam" />
     <DeviceCapability Name="microphone" />
   </Capabilities>

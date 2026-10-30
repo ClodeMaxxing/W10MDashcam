@@ -74,12 +74,44 @@ namespace W10MDashcam.Streaming
                     }
                     string body = Encoding.UTF8.GetString(bytes, headerEnd + 4, Math.Min(bodyLen, bytes.Length - headerEnd - 4));
                     bool fromUsb = socket.Information.RemoteAddress?.DisplayName == "127.0.0.1";
-                    byte[] reply = await _api.HandleAsync(HttpApi.Parse(lines[0], headers, body, fromUsb));
+                    var request = HttpApi.Parse(lines[0], headers, body, fromUsb);
+                    var file = await _api.TryOpenFileAsync(request);
+                    if (file != null)
+                    {
+                        await SendFileAsync(socket, file);
+                        return;
+                    }
+                    byte[] reply = await _api.HandleAsync(request);
                     await socket.OutputStream.WriteAsync(reply.AsBuffer());
                     await socket.OutputStream.FlushAsync();
                 }
             }
             catch { }
+        }
+
+        /// <summary>A recording: the head, then the file in 256 KB pieces (never the whole file in memory).</summary>
+        private static async Task SendFileAsync(StreamSocket socket, FileReply file)
+        {
+            if (file.Error != null)
+            {
+                await socket.OutputStream.WriteAsync(file.Error.AsBuffer());
+                await socket.OutputStream.FlushAsync();
+                return;
+            }
+            using (var body = file.Body)
+            {
+                await socket.OutputStream.WriteAsync(file.Head.AsBuffer());
+                var buf = new byte[256 * 1024];
+                long left = file.Length;
+                while (left > 0)
+                {
+                    int n = await body.ReadAsync(buf, 0, (int)Math.Min(buf.Length, left));
+                    if (n <= 0) break;
+                    await socket.OutputStream.WriteAsync(buf.AsBuffer(0, n));
+                    left -= n;
+                }
+                await socket.OutputStream.FlushAsync();
+            }
         }
     }
 }

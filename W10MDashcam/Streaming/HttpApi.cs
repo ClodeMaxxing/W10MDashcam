@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using W10MDashcam.Recording;
 using W10MDashcam.Rtsp;
 
 namespace W10MDashcam.Streaming
@@ -18,6 +19,16 @@ namespace W10MDashcam.Streaming
         public bool FromUsb;
     }
 
+    /// <summary>A file sent in pieces (a recording): the reply head, then Length bytes of Body from its current position.</summary>
+    internal sealed class FileReply
+    {
+        public byte[] Head;
+        public System.IO.Stream Body;
+        public long Length;
+        /// <summary>Instead of a file: a complete reply (an error).</summary>
+        public byte[] Error;
+    }
+
     /// <summary>
     /// The small web interface, served on the log port (http://PHONE-IP:5001) and on the RTSP ports:
     ///   /             the app log (plain text)
@@ -25,6 +36,8 @@ namespace W10MDashcam.Streaming
     ///   /snapshot.jpg the latest picture, when snapshots are turned on (needs the login when one is set)
     ///   /config       view (GET) or change (POST, form fields) settings - only over the USB cable
     ///   /camera       focus / exposure / white balance page (changes need the stream login, or the USB cable)
+    ///   /recordings   the dashcam recordings as JSON; /recordings/file?name=N[&amp;saved=1][&amp;dl=1] plays or downloads one;
+    ///                 POST /recordings/save keeps the current clip, POST /recordings/delete (name, saved) deletes one
     /// </summary>
     internal sealed class HttpApi
     {
@@ -36,6 +49,7 @@ namespace W10MDashcam.Streaming
         public Func<string> GetConfig = () => "";
         public Func<string> GetCameraJson = () => "{}";
         public DigestAuth Auth;
+        public SegmentRecorder Recorder;
 
         public async Task<byte[]> HandleAsync(HttpRequest r)
         {
@@ -62,6 +76,9 @@ namespace W10MDashcam.Streaming
 
                 if (path == "/camera" || path == "/camera/state" || path == "/camera/set")
                     return await HandleCameraAsync(r, path);
+
+                if (path == "/recordings" || path == "/recordings/save" || path == "/recordings/delete")
+                    return await HandleRecordingsAsync(r, path);
 
                 if (path == "/config")
                 {
@@ -109,7 +126,7 @@ namespace W10MDashcam.Streaming
                     return Reply(403, "Forbidden", "text/plain", "Use the settings page (missing X-Requested-With header)\n");
                 var all = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch" })
+                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip" })
                     if (all.TryGetValue(k, out var v)) only[k] = v;
                 string bad = CheckLoginFields(only);
                 if (bad != null) result = bad;
@@ -119,12 +136,99 @@ namespace W10MDashcam.Streaming
             if (result != null)
             {
                 string first = result.Split('\n')[0].Replace("\\", "\\\\").Replace("\"", "\\\"");
-                json = json.TrimEnd('}') + ",\"result\":\"" + first + "\"}";
+                json = json.Substring(0, json.LastIndexOf('}')) + ",\"result\":\"" + first + "\"}"; // only the outer brace: the JSON has nested objects
             }
             if (json.StartsWith("{")) json = "{\"canWrite\":" + (canWrite ? "true" : "false") + ",\"loginSet\":" + (loginSet ? "true" : "false")
                 + ",\"defaultLogin\":" + (Auth != null && Auth.IsDefault ? "true" : "false") + ",\"user\":\"" + (Auth != null ? Auth.UserName.Replace("\\", "").Replace("\"", "") : "") + "\"" + (json.Length > 2 ? "," : "") + json.Substring(1);
             return Reply(200, "OK", "application/json", json, "Cache-Control: no-store\r\n");
         }
+
+        /// <summary>The recordings list (JSON) and the save / delete actions (same rules as /camera/set).</summary>
+        private async Task<byte[]> HandleRecordingsAsync(HttpRequest r, string path)
+        {
+            if (Recorder == null) return Reply(404, "Not Found", "text/plain", "No recorder\n");
+            if (path == "/recordings")
+            {
+                var sb = new StringBuilder("{\"location\":\"" + Esc(Recorder.Location) + "\",\"files\":[");
+                bool first = true;
+                foreach (var f in await Recorder.ListAsync())
+                {
+                    if (!first) sb.Append(',');
+                    first = false;
+                    sb.Append("{\"name\":\"").Append(Esc(f.Name)).Append("\",\"size\":").Append(f.Size)
+                      .Append(",\"saved\":").Append(f.Saved ? "true" : "false").Append(",\"recording\":").Append(f.Recording ? "true" : "false").Append('}');
+                }
+                sb.Append("]}");
+                return Reply(200, "OK", "application/json", sb.ToString(), "Cache-Control: no-store\r\n");
+            }
+            if (r.Method != "POST") return Reply(405, "Method Not Allowed", "text/plain", "POST only\n");
+            bool canWrite = r.FromUsb || (Auth != null && Auth.Enabled);
+            if (!canWrite) return Reply(403, "Forbidden", "text/plain", "Changes need the login (or the USB cable)\n");
+            if (!r.FromUsb && Header(r, "X-Requested-With") != "W10MDashcam")
+                return Reply(403, "Forbidden", "text/plain", "Use the settings page (missing X-Requested-With header)\n");
+            if (path == "/recordings/save")
+            {
+                Recorder.SaveClip();
+                return Reply(200, "OK", "text/plain", "Saving the clip\n");
+            }
+            var form = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
+            string err = await Recorder.DeleteAsync(form.TryGetValue("name", out var n) ? n : "", form.TryGetValue("saved", out var sv) && sv == "1");
+            return err == null ? Reply(200, "OK", "text/plain", "Deleted\n") : Reply(400, "Bad Request", "text/plain", err + "\n");
+        }
+
+        /// <summary>
+        /// GET /recordings/file?name=N[&amp;saved=1][&amp;dl=1]: a recording, sent in pieces by the caller (it can be
+        /// gigabytes). Supports one byte range so browsers and players can seek. Null when the path is something else.
+        /// </summary>
+        public async Task<FileReply> TryOpenFileAsync(HttpRequest r)
+        {
+            if (Recorder == null || r.Path.TrimEnd('/') != "/recordings/file") return null;
+            try
+            {
+                if (Auth != null && Auth.Enabled && !r.FromUsb && !Auth.Check(r.Method, Header(r, "Authorization"), out bool stale))
+                    return new FileReply { Error = Reply(401, "Unauthorized", "text/plain", "Login required\n", Auth.Challenge(stale)) };
+                var q = ParseForm(r.Query);
+                string name = q.TryGetValue("name", out var n) ? n : "";
+                bool saved = q.TryGetValue("saved", out var sv) && sv == "1";
+                var body = await Recorder.OpenReadAsync(name, saved);
+                if (body == null) return new FileReply { Error = Reply(404, "Not Found", "text/plain", "No such recording\n") };
+                long total = body.Length, from = 0, to = total - 1;
+                int code = 200;
+                string extra = "Accept-Ranges: bytes\r\nCache-Control: no-store\r\n";
+                var m = System.Text.RegularExpressions.Regex.Match(Header(r, "Range") ?? "", @"^bytes=(\d*)-(\d*)$");
+                if (m.Success && total > 0)
+                {
+                    if (m.Groups[1].Value.Length > 0)
+                    {
+                        from = long.Parse(m.Groups[1].Value);
+                        if (m.Groups[2].Value.Length > 0) to = Math.Min(to, long.Parse(m.Groups[2].Value));
+                    }
+                    else if (m.Groups[2].Value.Length > 0) from = Math.Max(0, total - long.Parse(m.Groups[2].Value)); // last N bytes
+                    if (from > to || from >= total)
+                    {
+                        body.Dispose();
+                        return new FileReply { Error = Reply(416, "Range Not Satisfiable", "text/plain", "", "Content-Range: bytes */" + total + "\r\n") };
+                    }
+                    code = 206;
+                    extra += "Content-Range: bytes " + from + "-" + to + "/" + total + "\r\n";
+                }
+                if (q.TryGetValue("dl", out var dl) && dl == "1") extra += "Content-Disposition: attachment; filename=\"" + name + "\"\r\n";
+                body.Position = from;
+                long len = Math.Max(0, to - from + 1);
+                var head = Encoding.ASCII.GetBytes(
+                    "HTTP/1.0 " + code + (code == 206 ? " Partial Content" : " OK") + "\r\n" +
+                    "Content-Type: video/mp4\r\n" +
+                    "Content-Length: " + len + "\r\n" + extra +
+                    "Connection: close\r\n\r\n");
+                return new FileReply { Head = head, Body = body, Length = len };
+            }
+            catch (Exception ex)
+            {
+                return new FileReply { Error = Reply(500, "Internal Server Error", "text/plain", ex.Message + "\n") };
+            }
+        }
+
+        private static string Esc(string s) => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
 
         /// <summary>Returns an error text when the user/password fields of a web change are not acceptable, otherwise null.</summary>
         private static string CheckLoginFields(IDictionary<string, string> f)
