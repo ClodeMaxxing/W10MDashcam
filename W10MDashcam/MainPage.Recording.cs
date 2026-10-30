@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using Windows.Data.Json;
+using Windows.Foundation.Metadata;
+using Windows.Storage.AccessCache;
+using Windows.Storage.Pickers;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -10,14 +13,22 @@ using W10MDashcam.Recording;
 
 namespace W10MDashcam
 {
-    /// <summary>Dashcam recording: settings, the on-screen controls, web/USB config keys and status.</summary>
+    /// <summary>
+    /// Dashcam recording: the Record / Live buttons, the start-up switches, where recordings go, the camera button,
+    /// web/USB config keys and status.
+    ///
+    /// Recording and live view are separate: the camera runs while either is on (CameraWanted) and stops when both are off.
+    /// </summary>
     public sealed partial class MainPage
     {
         private readonly SegmentRecorder _recorder = new SegmentRecorder();
         private bool _loadingRecUi = true;
+        /// <summary>Live view (RTSP) wanted. Off: the camera may still run for recording, but nothing is streamed.</summary>
+        private bool _wantLive = true;
 
         private static readonly int[] SegmentMinutesOptions = { 1, 3, 5, 10 };
         private static readonly int[] LimitGbOptions = { 4, 8, 16, 32, 64, 0 }; // 0 = all free space (keeping 1 GB)
+        private static readonly string[] LocationModes = { "auto", "phone", "sd", "custom" };
 
         private sealed class ChoiceOption
         {
@@ -26,21 +37,29 @@ namespace W10MDashcam
             public override string ToString() => Text;
         }
 
+        private bool CameraWanted => _wantLive || _recorder.Enabled;
+        private bool RecordOnOpen => !(_settings.Values["RecAutoStart"] is bool r) || r;
+        private bool LiveOnOpen => !(_settings.Values["AutoStart"] is bool a) || a;
+
         /// <summary>Constructor part: saved settings into the recorder and the controls.</summary>
         private void LoadRecordingSettings()
         {
             _recorder.Log = Log;
-            _recorder.Enabled = !(_settings.Values["RecEnabled"] is bool re) || re;
+            _recorder.Enabled = false; // switched on by the start-up logic (Record when the app opens) or the button
             int seg = _settings.Values["RecSegmentMin"] is int sm ? sm : 3;
             int gb = _settings.Values["RecLimitGB"] is int lg ? lg : 16;
             SetRecorderLimits(seg, gb);
+            string mode = _settings.Values["RecLocation"] as string;
+            _recorder.StorageMode = Array.IndexOf(LocationModes, mode) >= 0 ? mode : "auto";
 
             foreach (var m in SegmentMinutesOptions) SegmentBox.Items.Add(new ChoiceOption { Value = m, Text = m + " min" });
             foreach (var g in LimitGbOptions) LimitBox.Items.Add(new ChoiceOption { Value = g, Text = g == 0 ? "All free space (keep 1 GB)" : g + " GB" });
-            RecordToggle.IsOn = _recorder.Enabled;
+            RebuildLocationBox();
+            RecordOnOpenToggle.IsOn = RecordOnOpen;
             SelectChoice(SegmentBox, seg);
             SelectChoice(LimitBox, gb);
             _loadingRecUi = false;
+            HookCameraButton();
         }
 
         private void SetRecorderLimits(int segmentMin, int limitGb)
@@ -67,22 +86,109 @@ namespace W10MDashcam
             cam.AudioFormatReady += _recorder.OnAudioFormat;
         }
 
-        // ---------------------------------------------------------------- controls
-
-        private void SaveClipButton_Click(object sender, RoutedEventArgs e) => _recorder.SaveClip();
-
-        private void RecordToggle_Toggled(object sender, RoutedEventArgs e)
+        /// <summary>At app start: what the two start-up switches ask for (nothing after a crash while starting).</summary>
+        private void ApplyStartupWishes(bool crashedLastTime)
         {
-            if (_loadingRecUi) return;
-            SetRecording(RecordToggle.IsOn);
+            _recorder.Enabled = RecordOnOpen && !crashedLastTime;
+            SetLive(LiveOnOpen && !crashedLastTime);
+        }
+
+        // ---------------------------------------------------------------- record / live
+
+        /// <summary>Starts or stops the camera so it runs exactly while recording or live view is wanted.</summary>
+        private async Task MatchCameraAsync()
+        {
+            // a start/stop already in progress: wait for it (up to 30 s), then check again
+            for (int i = 0; i < 60 && _busy; i++) await Task.Delay(500);
+            if (_camera == null || _busy) return;
+            if (CameraWanted != _camera.IsStreaming) await ToggleStreamingAsync();
+            UpdateRunButtons();
         }
 
         private void SetRecording(bool on)
         {
+            if (_recorder.Enabled == on) return;
             _recorder.Enabled = on;
-            _settings.Values["RecEnabled"] = on;
             if (!on) _recorder.EndSegment();
-            Log("Recording " + (on ? "on" : "off"));
+            Log("Recording " + (on ? "started" : "stopped"));
+        }
+
+        private void SetLive(bool on)
+        {
+            _wantLive = on;
+            _server.LiveEnabled = on;
+            if (!on) _server.DropViewers();
+        }
+
+        private async void RecordButton_Click(object sender, RoutedEventArgs e)
+        {
+            SetRecording(!_recorder.Enabled);
+            await MatchCameraAsync();
+        }
+
+        private async void LiveButton_Click(object sender, RoutedEventArgs e)
+        {
+            SetLive(!_wantLive);
+            Log("Live view " + (_wantLive ? "on" : "off") + (_recorder.Enabled ? " (recording continues)" : ""));
+            await MatchCameraAsync();
+        }
+
+        private void UpdateRunButtons()
+        {
+            RecordButton.Content = _recorder.Enabled ? "Stop recording" : "Start recording";
+            StartButton.Content = _wantLive ? "Stop streaming" : "Start streaming";
+        }
+
+        // ---------------------------------------------------------------- camera button
+
+        /// <summary>The phone's camera button saves the clip (full press), with a short buzz to confirm.</summary>
+        private void HookCameraButton()
+        {
+            try
+            {
+                if (!ApiInformation.IsTypePresent("Windows.Phone.UI.Input.HardwareButtons")) return;
+                Windows.Phone.UI.Input.HardwareButtons.CameraPressed += OnCameraButton;
+                Log("Camera button: press it to save the clip");
+            }
+            catch (Exception ex) { Log("Camera button not available: " + ex.Message); }
+        }
+
+        private async void OnCameraButton(object sender, Windows.Phone.UI.Input.CameraEventArgs e)
+        {
+            try
+            {
+                bool recording = _recorder.State == "recording";
+                if (recording) _recorder.SaveClip();
+                else Log("Camera button: not recording - nothing to save");
+                await BuzzAsync(recording ? 1 : 2);
+            }
+            catch (Exception ex) { Log("Camera button: " + ex.Message); }
+        }
+
+        private static async Task BuzzAsync(int times)
+        {
+            try
+            {
+                if (!ApiInformation.IsTypePresent("Windows.Phone.Devices.Notification.VibrationDevice")) return;
+                var v = Windows.Phone.Devices.Notification.VibrationDevice.GetDefault();
+                if (v == null) return;
+                for (int i = 0; i < times; i++)
+                {
+                    v.Vibrate(TimeSpan.FromMilliseconds(times == 1 ? 250 : 120));
+                    await Task.Delay(times == 1 ? 250 : 260);
+                }
+            }
+            catch { }
+        }
+
+        // ---------------------------------------------------------------- controls
+
+        private void SaveClipButton_Click(object sender, RoutedEventArgs e) => _recorder.SaveClip();
+
+        private void RecordOnOpenToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (_loadingRecUi) return;
+            _settings.Values["RecAutoStart"] = RecordOnOpenToggle.IsOn;
         }
 
         private void RecSetting_Changed(object sender, SelectionChangedEventArgs e)
@@ -102,6 +208,58 @@ namespace W10MDashcam
             Log("Recording: " + SegmentMinutes + " min files, keep " + (LimitGb == 0 ? "all free space (1 GB spare)" : "up to " + LimitGb + " GB"));
         }
 
+        // ---------------------------------------------------------------- where recordings go
+
+        private bool HasCustomFolder => StorageApplicationPermissions.FutureAccessList.ContainsItem(SegmentRecorder.CustomFolderToken);
+
+        private void RebuildLocationBox()
+        {
+            bool was = _loadingRecUi;
+            _loadingRecUi = true;
+            LocationBox.Items.Clear();
+            LocationBox.Items.Add(new ChoiceOption { Value = 0, Text = "Automatic (SD card if present)" });
+            LocationBox.Items.Add(new ChoiceOption { Value = 1, Text = "Phone storage" });
+            LocationBox.Items.Add(new ChoiceOption { Value = 2, Text = "SD card" });
+            if (HasCustomFolder) LocationBox.Items.Add(new ChoiceOption { Value = 3, Text = "Chosen folder" });
+            SelectChoice(LocationBox, Array.IndexOf(LocationModes, _recorder.StorageMode));
+            _loadingRecUi = was;
+        }
+
+        private void LocationBox_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingRecUi || !(LocationBox.SelectedItem is ChoiceOption c)) return;
+            SetLocation(LocationModes[c.Value]);
+        }
+
+        private void SetLocation(string mode)
+        {
+            if (_recorder.StorageMode == mode) return;
+            _recorder.StorageMode = mode;
+            _settings.Values["RecLocation"] = mode;
+            _recorder.Relocate();
+            Log("Recordings will be saved to: " + mode);
+        }
+
+        /// <summary>Opens the phone's folder picker; the folder is remembered (future-access list) and used from now on.</summary>
+        private async void ChooseFolderButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new FolderPicker { SuggestedStartLocation = PickerLocationId.VideosLibrary };
+                picker.FileTypeFilter.Add(".mp4");
+                var folder = await picker.PickSingleFolderAsync();
+                if (folder == null) return;
+                StorageApplicationPermissions.FutureAccessList.AddOrReplace(SegmentRecorder.CustomFolderToken, folder);
+                Log("Recording folder chosen: " + folder.Path);
+                RebuildLocationBox();
+                _recorder.StorageMode = "custom"; // force the move even if "custom" was already selected
+                _settings.Values["RecLocation"] = "custom";
+                _recorder.Relocate();
+                RebuildLocationBox();
+            }
+            catch (Exception ex) { Log("Choosing a folder failed: " + ex.Message); }
+        }
+
         /// <summary>Once a second, with the other stats.</summary>
         private void UpdateRecordingUi()
         {
@@ -109,35 +267,57 @@ namespace W10MDashcam
             bool rec = r.State == "recording";
             RecDot.Fill = new Windows.UI.Xaml.Media.SolidColorBrush(rec ? Windows.UI.Color.FromArgb(255, 0xFF, 0x30, 0x30)
                 : r.State == "error" ? Windows.UI.Color.FromArgb(255, 0xFF, 0xA0, 0x20) : Windows.UI.Color.FromArgb(255, 0x55, 0x55, 0x55));
-            RecStateText.Text = rec ? "REC " + TimeSpan.FromSeconds(Math.Floor(r.CurrentSeconds)).ToString(@"m\:ss") : r.State.ToUpperInvariant();
+            RecStateText.Text = rec ? "REC " + TimeSpan.FromSeconds(Math.Floor(r.CurrentSeconds)).ToString(@"m\:ss")
+                : !r.Enabled ? "NOT RECORDING" : r.State.ToUpperInvariant();
             RecInfoText.Text = RecordingSummary();
             SaveClipButton.IsEnabled = rec;
+            LocationText.Text = string.IsNullOrEmpty(r.Location) ? "Decided when recording starts" : "Now: " + r.Location;
+            UpdateRunButtons();
         }
 
         private string RecordingSummary()
         {
             var r = _recorder;
-            if (!r.Enabled) return "Recording is off";
             if (!string.IsNullOrEmpty(r.LastError) && r.State == "error") return r.LastError;
-            if (string.IsNullOrEmpty(r.Location)) return "Starts with the camera";
+            if (string.IsNullOrEmpty(r.Location)) return r.Enabled ? "Starts with the camera" : "Recording is stopped";
             string s = string.Format(CultureInfo.InvariantCulture, "{0} files, {1:0.0} GB", r.LoopCount, r.LoopBytes / 1073741824.0);
             if (r.FreeBytes >= 0) s += string.Format(CultureInfo.InvariantCulture, ", {0:0.0} GB free", r.FreeBytes / 1073741824.0);
             if (r.SavedClips > 0) s += ", " + r.SavedClips + " saved";
-            s += " - " + r.Location;
             if (r.DroppedFrames > 0) s += " - " + r.DroppedFrames + " frames dropped (storage too slow)";
             return s;
         }
 
         // ---------------------------------------------------------------- web / USB config
 
-        /// <summary>record=on|off, segment=MINUTES, storage=GB|all, saveclip=1. Runs on a network thread.</summary>
+        /// <summary>
+        /// record=on|off (now), recordonopen=on|off, live=on|off (now), liveonopen=on|off, segment=MINUTES,
+        /// storage=GB|all, location=auto|phone|sd|custom, saveclip=1. Runs on a network thread.
+        /// </summary>
         private async Task ApplyRecordingConfigAsync(IDictionary<string, string> form, List<string> done)
         {
-            bool uiChange = false;
+            bool uiChange = false, matchCamera = false;
             if (form.TryGetValue("record", out var rec))
             {
                 SetRecording(IsOn(rec));
                 done.Add("recording " + (_recorder.Enabled ? "on" : "off"));
+                matchCamera = true;
+            }
+            if (form.TryGetValue("live", out var live))
+            {
+                SetLive(IsOn(live));
+                done.Add("live view " + (_wantLive ? "on" : "off"));
+                matchCamera = true;
+            }
+            if (form.TryGetValue("recordonopen", out var roo))
+            {
+                _settings.Values["RecAutoStart"] = IsOn(roo);
+                done.Add("record when the app opens " + (RecordOnOpen ? "on" : "off"));
+                uiChange = true;
+            }
+            if (form.TryGetValue("liveonopen", out var loo))
+            {
+                _settings.Values["AutoStart"] = IsOn(loo);
+                done.Add("live view when the app opens " + (LiveOnOpen ? "on" : "off"));
                 uiChange = true;
             }
             int seg = SegmentMinutes, gb = LimitGb;
@@ -154,35 +334,53 @@ namespace W10MDashcam
                 done.Add("recording files " + SegmentMinutes + " min, storage " + (LimitGb == 0 ? "all" : LimitGb + " GB"));
                 uiChange = true;
             }
+            if (form.TryGetValue("location", out var loc))
+            {
+                loc = loc.Trim().ToLowerInvariant();
+                if (Array.IndexOf(LocationModes, loc) < 0) done.Add("location: use auto, phone, sd or custom");
+                else if (loc == "custom" && !HasCustomFolder) done.Add("location: choose a folder on the phone first (Recording > Choose folder)");
+                else { SetLocation(loc); done.Add("recordings go to " + loc); uiChange = true; }
+            }
             if (form.TryGetValue("saveclip", out var sc) && IsOn(sc))
             {
                 _recorder.SaveClip();
                 done.Add("clip saved");
             }
-            if (uiChange)
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            if (uiChange || matchCamera)
+                await RunUiAsync(async () =>
                 {
                     _loadingRecUi = true;
-                    RecordToggle.IsOn = _recorder.Enabled;
+                    RecordOnOpenToggle.IsOn = RecordOnOpen;
+                    AutoStartToggle.IsOn = LiveOnOpen;
                     SelectChoice(SegmentBox, SegmentMinutes);
                     SelectChoice(LimitBox, LimitGb);
                     _loadingRecUi = false;
+                    RebuildLocationBox();
+                    if (matchCamera) await MatchCameraAsync();
+                    else UpdateRunButtons();
                 });
         }
 
         private string RecordingConfigText() =>
-            "record=" + (_recorder.Enabled ? "on" : "off") + " (" + _recorder.State + ")\n" +
+            "record=" + (_recorder.Enabled ? "on" : "off") + " (" + _recorder.State + "), recordonopen=" + (RecordOnOpen ? "on" : "off") + "\n" +
+            "live=" + (_wantLive ? "on" : "off") + ", liveonopen=" + (LiveOnOpen ? "on" : "off") + "\n" +
+            "location=" + _recorder.StorageMode + " (now: " + _recorder.Location + ")\n" +
             "segment=" + SegmentMinutes + " (minutes per file)\n" +
             "storage=" + (LimitGb == 0 ? "all" : LimitGb.ToString()) + " (GB the loop recordings may use; all = all free space but 1 GB)\n";
 
-        private const string RecordingConfigHelp = ", record=on|off, segment=MINUTES, storage=GB|all, saveclip=1";
+        private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=GB|all, saveclip=1";
 
         private void AddRecordingJson(JsonObject o)
         {
             var r = _recorder;
+            o["live"] = JsonValue.CreateBooleanValue(_wantLive);
+            o["liveOnOpen"] = JsonValue.CreateBooleanValue(LiveOnOpen);
             var j = new JsonObject();
             j["enabled"] = JsonValue.CreateBooleanValue(r.Enabled);
+            j["onOpen"] = JsonValue.CreateBooleanValue(RecordOnOpen);
             j["state"] = JsonValue.CreateStringValue(r.State);
+            j["mode"] = JsonValue.CreateStringValue(r.StorageMode);
+            j["customFolder"] = JsonValue.CreateBooleanValue(HasCustomFolder);
             j["location"] = JsonValue.CreateStringValue(r.Location);
             j["current"] = JsonValue.CreateStringValue(r.CurrentName);
             j["seconds"] = JsonValue.CreateNumberValue(Math.Floor(r.CurrentSeconds));

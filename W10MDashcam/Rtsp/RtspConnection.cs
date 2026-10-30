@@ -274,6 +274,12 @@ namespace W10MDashcam.Rtsp
 
                 case "DESCRIBE":
                 {
+                    if (!_server.LiveEnabled)
+                    {
+                        Log("DESCRIBE refused: live view is switched off in the app");
+                        Respond(cseq, 503, "Service Unavailable", "Retry-After: 30\r\n");
+                        return true;
+                    }
                     if (!await _server.WaitForParameterSetsAsync(5000))
                     {
                         Log("DESCRIBE before the camera produced video - asked to retry");

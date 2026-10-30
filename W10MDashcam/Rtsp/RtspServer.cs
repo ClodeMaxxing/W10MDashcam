@@ -33,6 +33,16 @@ namespace W10MDashcam.Rtsp
         public volatile bool AllowUdp;
         /// <summary>If a viewer's oldest unsent frame is older than this, it skips to the next keyframe.</summary>
         public double MaxBacklogSeconds = 1.5;
+        /// <summary>Live view on/off. Off: no video is sent and new viewers are refused (the camera may still be recording).</summary>
+        public volatile bool LiveEnabled = true;
+
+        /// <summary>Disconnects every viewer (live view switched off).</summary>
+        public void DropViewers()
+        {
+            RtspConnection[] all;
+            lock (_lock) all = _connections.Where(c => c.IsPlaying).ToArray();
+            foreach (var c in all) { try { c.Close(); } catch { } }
+        }
 
         public RtspServer(params int[] ports) { _ports = ports; }
 
@@ -139,6 +149,7 @@ namespace W10MDashcam.Rtsp
         public void SendAccessUnit(IList<byte[]> nals, long time100ns, bool keyframe)
         {
             NoteMediaTime(time100ns);
+            if (!LiveEnabled) return;
             RtspConnection[] playing;
             lock (_lock)
             {
@@ -155,6 +166,7 @@ namespace W10MDashcam.Rtsp
         public void SendAudio(byte[] frame, long time100ns)
         {
             NoteMediaTime(time100ns);
+            if (!LiveEnabled) return;
             RtspConnection[] playing;
             lock (_lock)
             {

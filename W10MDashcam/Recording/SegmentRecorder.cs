@@ -23,9 +23,12 @@ namespace W10MDashcam.Recording
 
     /// <summary>
     /// The dashcam recorder. Takes the same encoded frames the RTSP server sends (no second encode) and writes
-    /// them to fragmented MP4 files in segments, on the SD card when there is one (otherwise the app's own storage):
-    ///   W10MDashcam\2026-10-30_13-40-05.mp4        loop recordings; the oldest are deleted to stay within the limit
-    ///   W10MDashcam\Saved\...                      clips kept with "Save clip"; never deleted automatically
+    /// them to fragmented MP4 files in segments, in the chosen place (StorageMode): the SD card (W10MDashcam folder),
+    /// the app's own storage, or a folder picked by the user:
+    ///   2026-10-30_13-40-05.mp4      loop recordings; the oldest are deleted to stay within the limit
+    ///   Saved\...                    clips kept with "Save clip"; never deleted automatically
+    /// Only files named like the app's own recordings are ever counted or deleted, so a picked folder that also
+    /// holds other videos is safe.
     ///
     /// The camera thread only queues frames (cheap, never throws, never waits). One worker writes them out, so a slow
     /// or full card can never stall the camera: if the queue grows too big, frames are dropped up to the next keyframe.
@@ -41,11 +44,19 @@ namespace W10MDashcam.Recording
         public long LimitBytes = 16L << 30;
         /// <summary>Always leave this much free on the storage.</summary>
         public long MinFreeBytes = 1L << 30;
+        /// <summary>Where to record: "auto" (SD card if present, else phone), "phone", "sd", or "custom" (the picked folder).</summary>
+        public volatile string StorageMode = "auto";
+        /// <summary>Key of the picked folder in the app's future-access list.</summary>
+        public const string CustomFolderToken = "RecordingFolder";
+        /// <summary>The picked folder's path, for display (empty until one is picked).</summary>
+        public string CustomFolderPath { get; private set; } = "";
 
         private const long MaxQueueBytes = 48L << 20;     // ~16 s at 24 Mbps; ~100 s at 4 Mbps
         private const long Second = 10000000L;            // 100 ns units
         private const long MaxFragment = 2 * Second;      // a fragment is written at least this often
         private static readonly Regex SafeName = new Regex(@"^[0-9A-Za-z_\-\. ()]{1,80}\.mp4$");
+        /// <summary>The app's own loop files: 2026-10-30_13-40-05.mp4 (or "... (2).mp4"). Nothing else is ever deleted.</summary>
+        private static readonly Regex OwnName = new Regex(@"^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d( \(\d+\))?\.mp4$");
 
         // ---- queue (camera thread -> worker)
         private readonly object _lock = new object();
@@ -58,7 +69,7 @@ namespace W10MDashcam.Recording
 
         private sealed class ParamSets { public byte[] Sps, Pps; }
         private sealed class AudioFormatItem { public AudioFormat Format; }
-        private enum Cmd { End, Save, Shutdown, Housekeep }
+        private enum Cmd { End, Save, Shutdown, Housekeep, Relocate }
         private sealed class Command { public Cmd What; public TaskCompletionSource<bool> Done; }
 
         // ---- worker state
@@ -164,6 +175,9 @@ namespace W10MDashcam.Recording
         /// <summary>Apply changed limits now (delete old recordings if needed).</summary>
         public void Housekeep() => Enqueue(new Command { What = Cmd.Housekeep }, 0);
 
+        /// <summary>Record somewhere else from now on (StorageMode changed or a new folder picked): the current file ends here.</summary>
+        public void Relocate() => Enqueue(new Command { What = Cmd.Relocate }, 0);
+
         /// <summary>Finish the current file and wait (at most a few seconds) - for app suspend.</summary>
         public async Task ShutdownAsync()
         {
@@ -253,6 +267,12 @@ namespace W10MDashcam.Recording
                         break;
                     case Cmd.Save:
                         await SaveAsync();
+                        break;
+                    case Cmd.Relocate:
+                        if (_seg != null) await CloseAsync(-1);
+                        _lastVideoTime = -1;
+                        _root = null;
+                        await EnsureFoldersAsync();
                         break;
                     case Cmd.Housekeep:
                         _root = null; // re-read the folder (a file may have been deleted from the web page)
@@ -465,37 +485,59 @@ namespace W10MDashcam.Recording
         private async Task EnsureFoldersAsync()
         {
             if (_root != null) return;
+            string mode = StorageMode ?? "auto";
             StorageFolder root = null;
-            string where = null;
-            try
+            string where = null, note = "";
+            if (mode == "custom")
             {
-                var cards = await KnownFolders.RemovableDevices.GetFoldersAsync();
-                if (cards.Count > 0)
+                try
                 {
-                    root = await cards[0].CreateFolderAsync("W10MDashcam", CreationCollisionOption.OpenIfExists);
-                    where = "SD card (" + root.Path + ")";
+                    var list = Windows.Storage.AccessCache.StorageApplicationPermissions.FutureAccessList;
+                    if (list.ContainsItem(CustomFolderToken))
+                    {
+                        root = await list.GetFolderAsync(CustomFolderToken);
+                        CustomFolderPath = root.Path;
+                        where = "chosen folder (" + root.Path + ")";
+                    }
+                    else note = " - no folder chosen yet";
                 }
+                catch (Exception ex) { note = " - the chosen folder is not available (" + ex.Message + ")"; }
             }
-            catch (Exception ex) { Log("SD card not usable: " + ex.Message); }
+            if (root == null && (mode == "auto" || mode == "sd"))
+            {
+                try
+                {
+                    var cards = await KnownFolders.RemovableDevices.GetFoldersAsync();
+                    if (cards.Count > 0)
+                    {
+                        root = await cards[0].CreateFolderAsync("W10MDashcam", CreationCollisionOption.OpenIfExists);
+                        where = "SD card (" + root.Path + ")";
+                    }
+                    else if (mode == "sd") note = " - no SD card found";
+                }
+                catch (Exception ex) { note = " - SD card not usable (" + ex.Message + ")"; }
+            }
             if (root == null)
             {
                 root = await ApplicationData.Current.LocalFolder.CreateFolderAsync("Recordings", CreationCollisionOption.OpenIfExists);
-                where = "phone storage (no SD card)";
+                where = "phone storage" + (mode == "phone" ? "" : note.Length > 0 ? note : " (no SD card)");
+                if (note.Length > 0) Log("Recordings:" + note + " - using phone storage instead");
             }
             _loop = root;
             _saved = await root.CreateFolderAsync("Saved", CreationCollisionOption.OpenIfExists);
             _segments.Clear();
-            foreach (var f in (await _loop.GetFilesAsync()).Where(x => x.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)).OrderBy(x => x.Name))
+            foreach (var f in (await _loop.GetFilesAsync()).Where(x => OwnName.IsMatch(x.Name)).OrderBy(x => x.Name))
             {
                 if (_seg != null && f.Name == _seg.Name) continue;
                 var p = await f.GetBasicPropertiesAsync();
                 _segments.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
             }
-            SavedClips = (await _saved.GetFilesAsync()).Count;
+            SavedClips = (await _saved.GetFilesAsync()).Count(x => x.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase));
             _root = root;
             if (Location != where) Log("Recordings: " + where + ", " + _segments.Count + " loop files, " + SavedClips + " saved");
             Location = where;
             UpdateTotals();
+            FreeBytes = await GetFreeSpaceAsync(_root);
         }
 
         private void UpdateTotals()
@@ -564,7 +606,7 @@ namespace W10MDashcam.Recording
             {
                 foreach (var f in await pair.Item1.GetFilesAsync())
                 {
-                    if (!f.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!f.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || (!pair.Item2 && !OwnName.IsMatch(f.Name))) continue;
                     BasicProperties p = await f.GetBasicPropertiesAsync();
                     list.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size, Saved = pair.Item2, Recording = !pair.Item2 && f.Name == current });
                 }
@@ -592,6 +634,7 @@ namespace W10MDashcam.Recording
         {
             if (!SafeName.IsMatch(name ?? "")) return "bad name";
             if (!saved && name == CurrentName) return "that file is being recorded";
+            if (!saved && !OwnName.IsMatch(name)) return "not a recording";
             var folder = saved ? _saved : _loop;
             if (folder == null) return "no recordings";
             try

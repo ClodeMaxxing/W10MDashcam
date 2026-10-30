@@ -66,8 +66,18 @@
                 </Grid>
 
                 <!-- MAIN: what is needed day to day. Everything else folds away below. -->
-                <Button x:Name="StartButton" Content="Start streaming" HorizontalAlignment="Stretch"
-                        Margin="0,0,0,6" Click="StartButton_Click" IsEnabled="False" />
+                <!-- Recording and live view are separate: the camera runs while either one is on. -->
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="6" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="RecordButton" Content="Start recording" HorizontalAlignment="Stretch" FontSize="13"
+                            Click="RecordButton_Click" IsEnabled="False" />
+                    <Button x:Name="StartButton" Grid.Column="2" Content="Start streaming" HorizontalAlignment="Stretch" FontSize="13"
+                            Click="LiveButton_Click" IsEnabled="False" />
+                </Grid>
                 <!-- Dashcam recording card: REC state, the Save clip button, storage summary. -->
                 <Border Background="#140707" BorderBrush="#3A1F1F" BorderThickness="1" CornerRadius="6" Padding="10,8,10,8" Margin="0,0,0,6">
                     <StackPanel>
@@ -208,10 +218,13 @@
 
                 <Button Style="{StaticResource FoldButton}" Tag="RecordingPanel|RECORDING" Content="RECORDING  &#x25B8;" Click="Fold_Click" />
                 <StackPanel x:Name="RecordingPanel" Visibility="Collapsed">
-                    <ToggleSwitch x:Name="RecordToggle" Header="Record to storage" IsOn="True" Toggled="RecordToggle_Toggled" />
+                    <ToggleSwitch x:Name="RecordOnOpenToggle" Header="Record when the app opens" IsOn="True" Toggled="RecordOnOpenToggle_Toggled" />
+                    <ComboBox x:Name="LocationBox" Header="Save recordings to" SelectionChanged="LocationBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+                    <Button x:Name="ChooseFolderButton" Content="Choose folder..." HorizontalAlignment="Stretch" Click="ChooseFolderButton_Click" Margin="0,0,0,2" />
+                    <TextBlock x:Name="LocationText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <ComboBox x:Name="SegmentBox" Header="New file every" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
                     <ComboBox x:Name="LimitBox" Header="Space for loop recording" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <TextBlock Text="The oldest files are deleted to stay within this space. Saved clips (the current and the previous file) are never deleted. Recordings: on the web page at /camera." FontSize="11" Foreground="#7F9A86" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <TextBlock Text="The oldest files are deleted to stay within this space. Saved clips (the current and the previous file) are never deleted, and files the app did not record are never touched. The camera button saves a clip too. Recordings: on the web page at /camera." FontSize="11" Foreground="#7F9A86" TextWrapping="Wrap" Margin="0,0,0,6" />
                 </StackPanel>
 
                 <Button Style="{StaticResource FoldButton}" Tag="VideoPanel|VIDEO" Content="VIDEO  &#x25B8;" Click="Fold_Click" />
@@ -280,7 +293,7 @@
                     <TextBlock Text="RTSP address (NVR / VLC):" Foreground="#7F9A86" FontSize="12" />
                     <TextBlock x:Name="AddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap"
                                FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <ToggleSwitch x:Name="AutoStartToggle" Header="Start streaming when the app opens" IsOn="True" Toggled="AutoStartToggle_Toggled" />
+                    <ToggleSwitch x:Name="AutoStartToggle" Header="Live stream when the app opens" IsOn="True" Toggled="AutoStartToggle_Toggled" />
                     <ToggleSwitch x:Name="UdpToggle" Header="Allow RTP over UDP" IsOn="False" Toggled="UdpToggle_Toggled" />
                     <TextBlock Text="TCP is more reliable on Wi-Fi." Foreground="#7F9A86" FontSize="12" TextWrapping="Wrap" Margin="0,-4,0,6" />
                     <ToggleSwitch x:Name="SnapshotToggle" Header="Snapshots at /snapshot.jpg" IsOn="False" Toggled="SnapshotToggle_Toggled" />

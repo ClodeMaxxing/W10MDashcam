@@ -211,18 +211,20 @@ namespace W10MDashcam
                 Log("Formats: " + string.Join(", ", formats.Select(f => f.ToString().Replace(" fps", ""))));
                 _formatList = string.Join(", ", formats.Select(FormatKey));
 
-                // Security-camera defaults (v1.2+): 1080p at the lowest offered rate of 15 fps or more, 4 Mbps, keyframe every 2 s.
-                // Settings saved by older versions used different lists, so they are reset once.
-                if (!(_settings.Values["DefaultsVersion"] is int dv) || dv < 2)
+                // Dashcam defaults (0.3+): 4K at 30 fps and 24 Mbps (number plates need the detail), keyframe every 2 s.
+                // Applied once over whatever older versions saved; heat protection still drops to 1080p when needed.
+                if (!(_settings.Values["DefaultsVersion"] is int dv) || dv < 3)
                 {
                     _settings.Values.Remove("Format");
                     _settings.Values.Remove("Bitrate");
                     _settings.Values.Remove("Keyframe");
-                    _settings.Values["DefaultsVersion"] = 2;
-                    Log("Applied security-camera defaults (1080p, 4 Mbps, keyframe every 2 s)");
+                    _settings.Values["BitrateBps"] = 24000000;
+                    _settings.Values["DefaultsVersion"] = 3;
+                    Log("Applied dashcam defaults (4K 30 fps, 24 Mbps, keyframe every 2 s)");
                 }
                 string savedFormat = _settings.Values["Format"] as string;
                 ResolutionBox.SelectedItem = formats.FirstOrDefault(f => f.ToString() == savedFormat)
+                    ?? formats.FirstOrDefault(f => f.Width == 3840 && f.Height == 2160 && Math.Round(f.Fps) == 30)
                     ?? formats.Where(f => f.Width == 1920 && f.Height == 1080 && f.Fps >= 14.5).OrderBy(f => f.Fps).FirstOrDefault()
                     ?? formats.FirstOrDefault();
                 if (_settings.Values["BitrateBps"] is int savedBps && savedBps >= 0)
@@ -239,7 +241,8 @@ namespace W10MDashcam
                 PowerSaveToggle.IsOn = !(_settings.Values["PowerSave"] is bool b1) || b1;
 
                 bool crashedLastTime = _settings.Values["StartInProgress"] is bool sip && sip;
-                bool autoStarting = AutoStartToggle.IsOn && !crashedLastTime;
+                ApplyStartupWishes(crashedLastTime); // Record / Live when the app opens
+                bool autoStarting = CameraWanted;
 
                 // Crash guard for camera settings: if the app died while applying them last time, a saved
                 // manual value may be the cause, so go back to automatic instead of crashing again.
@@ -272,7 +275,8 @@ namespace W10MDashcam
                 await ApplyTuningAsync(true);
 
                 ShowAddresses();
-                StartButton.IsEnabled = formats.Count > 0;
+                StartButton.IsEnabled = RecordButton.IsEnabled = formats.Count > 0;
+                UpdateRunButtons();
                 _statsTimer.Start();
                 _healthTimer.Start();
                 CheckPower();
@@ -321,7 +325,6 @@ namespace W10MDashcam
 
         // ------------------------------------------------------------------ start / stop
 
-        private async void StartButton_Click(object sender, RoutedEventArgs e) => await ToggleStreamingAsync();
 
         private async void Setting_Changed(object sender, SelectionChangedEventArgs e)
         {
@@ -351,7 +354,7 @@ namespace W10MDashcam
             if (_busy || _camera == null) return;
             _busy = true;
             _busySince = DateTime.Now;
-            StartButton.IsEnabled = false;
+            StartButton.IsEnabled = RecordButton.IsEnabled = false;
             try
             {
                 if (!_camera.IsStreaming)
@@ -393,7 +396,6 @@ namespace W10MDashcam
                     _tuning.FrameLimitMs = 1000.0 / Math.Max(1, f.Fps);
                     await Task.Delay(2500); // let the first frames flow before touching the camera controls again
                     await ApplyTuningAsync(true);
-                    StartButton.Content = "Stop streaming";
                     await ApplyBlackoutAsync();
                     if (!_keepAwake) { _displayRequest.RequestActive(); _keepAwake = true; }
                 }
@@ -416,7 +418,8 @@ namespace W10MDashcam
             }
             finally
             {
-                StartButton.IsEnabled = true;
+                StartButton.IsEnabled = RecordButton.IsEnabled = true;
+                UpdateRunButtons();
                 _busy = false;
             }
         }
@@ -429,7 +432,6 @@ namespace W10MDashcam
 
         private void StopUi()
         {
-            StartButton.Content = "Start streaming";
             if (_keepAwake) { _displayRequest.RequestRelease(); _keepAwake = false; }
         }
 
@@ -727,7 +729,8 @@ namespace W10MDashcam
         {
             int viewers = _server.ClientCount;
             ViewersText.Text = viewers + (viewers == 1 ? " viewer" : " viewers");
-            StateText.Text = _protect ? "HEAT PROTECTION" : streaming ? "STREAMING" : "STOPPED";
+            StateText.Text = _protect ? "HEAT PROTECTION" : !streaming ? "STOPPED"
+                : _recorder.Enabled ? (_wantLive ? "REC + LIVE" : "RECORDING") : "LIVE ONLY";
             StateText.Foreground = _protect ? Brush(0xFF, 0x6B, 0x6B) : Brush(0x9C, 0xF0, 0xB0);
             StatusDot.Fill = _protect ? Brush(0xFF, 0x55, 0x55) : streaming ? Brush(0x39, 0xFF, 0x14) : Brush(0x55, 0x55, 0x55);
             var m = System.Text.RegularExpressions.Regex.Match(_currentFormatKey ?? "", @"^(\d+)x(\d+)@(\d+)");
@@ -1975,8 +1978,8 @@ namespace W10MDashcam
                 await RunUiAsync(async () =>
                 {
                     bool on = _camera != null && _camera.IsStreaming;
-                    if (a == "start" && !on) await ToggleStreamingAsync();
-                    else if (a == "stop" && on) await ToggleStreamingAsync();
+                    // start / stop = live view (recording carries on); restart = the camera
+                    if (a == "start" || a == "stop") { SetLive(a == "start"); await MatchCameraAsync(); }
                     else if (a == "restart") { if (on) await ToggleStreamingAsync(); await ToggleStreamingAsync(); }
                 });
                 done.Add("stream " + a);

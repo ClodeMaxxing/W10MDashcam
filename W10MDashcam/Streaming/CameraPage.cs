@@ -88,7 +88,9 @@ button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,
 <div class='top'><span class='dot' id='rdot'></span><span class='state' id='rstate'>-</span><span class='pill r' id='rloc'></span></div>
 <button class='save' id='rsave' data-tip='Keeps the file being recorded and the one before it in the Saved folder, where loop recording never deletes them.'>SAVE CLIP</button>
 <div class='sub' id='rinfo' style='margin:6px 0 0'></div></div>
-<div class='vrow' style='margin-top:8px'><label><input type='checkbox' id='ron'> Record</label><select id='rseg'></select><select id='rlim'></select></div>
+<div class='btnrow' style='margin-top:8px'><button id='rbtn'>Stop recording</button><label><input type='checkbox' id='roo'> Record when the app opens</label></div>
+<div class='vrow' style='margin-top:8px'><select id='rseg'></select><select id='rlim'></select></div>
+<div class='vrow' style='margin-top:6px'><select id='rwhere'></select><i class='tip' data-tip='Where new recordings go. A folder of your own is chosen on the phone (Recording > Choose folder). The list below shows the current place only.'>i</i></div>
 <div class='btnrow' style='margin-top:6px'><button id='rref'>Refresh list</button><span class='sub' style='margin:0'>Tap a name to play it here, Download to save it.</span></div>
 <table class='files' id='rlist'></table></div>
 <h2>Video</h2>
@@ -143,7 +145,7 @@ function render(){
  $('fo').disabled=$('ps').disabled=!st.canWrite;
  $('ps').textContent=st.blackout?'Phone screen is black - wake it':'Black out the phone screen';
  $('fmt').disabled=$('br').disabled=$('hb').disabled=!st.canWrite;
- $('ss').textContent=st.streaming?'Stop stream':'Start stream';$('ss').disabled=!st.canWrite;
+ $('ss').textContent=st.live?'Stop live view':'Start live view';$('ss').disabled=!st.canWrite;
  $('eng').style.display=st.safeMode?'inline-block':'none';$('eng').disabled=!st.canWrite;
  $('safe').textContent=st.safeMode?'Safe mode: the app is using its fallback engine, limited to 1080p. Return to normal mode to use 4K.':'';
  var h=location.hostname,u=st.loginSet?'USER:PASSWORD@':'';
@@ -254,7 +256,7 @@ $('addrclose').onclick=function(){$('addrbox').className='modal'};
 $('addrbox').onclick=function(e){if(e.target===this)this.className='modal'};
 $('fo').onclick=function(){$('msg').textContent='Focusing...';send('focus=once')};
 $('ps').onclick=function(){send('powersave='+(st&&st.blackout?'off':'on'))};
-$('ss').onclick=function(){send('stream='+(st&&st.streaming?'stop':'start'))};
+$('ss').onclick=function(){send('live='+(st&&st.live?'off':'on'))};
 $('eng').onclick=function(){send('engine=normal')};
 function video(k,v){send(k+'='+v);$('msg').textContent='Applying - the stream restarts for a moment...'}
 $('fmt').onchange=function(){video('format',this.value)};
@@ -298,7 +300,7 @@ $('ws').oninput=function(){touched=Date.now();labels();later('wb='+this.value)};
 function mb(b){return b>=1073741824?(b/1073741824).toFixed(1)+' GB':Math.max(1,Math.round(b/1048576))+' MB'}
 function hms(s){s=Math.floor(s||0);var m=Math.floor(s/60);s=s%60;return m+':'+(s<10?'0':'')+s}
 function esc(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;')}
-var segs=[1,3,5,10],lims=[4,8,16,32,64,0];
+var segs=[1,3,5,10],lims=[4,8,16,32,64,0],wheres={auto:'Save to: automatic (SD card if present)',phone:'Save to: phone storage',sd:'Save to: SD card',custom:'Save to: chosen folder'};
 function recRender(){
  var r=st&&st.recording;if(!r)return;
  var on=r.state=='recording';
@@ -308,13 +310,15 @@ function recRender(){
  var i=r.error&&r.state=='error'?r.error:(r.files+' loop files, '+mb(r.usedMB*1048576)+(r.freeMB!=null?', '+mb(r.freeMB*1048576)+' free':'')+(r.saved?', '+r.saved+' saved':''));
  if(r.dropped)i+=' - '+r.dropped+' frames dropped (storage too slow)';
  if(on&&r.writeMBps)i+=' - writing '+r.writeMBps.toFixed(1)+' MB/s';
- $('rinfo').textContent=r.enabled?i:'Recording is off';
+ $('rinfo').textContent=r.enabled?i:'Recording is stopped';
+ $('rbtn').textContent=r.enabled?'Stop recording':'Start recording';$('rbtn').disabled=!st.canWrite;
  $('rsave').disabled=!st.canWrite||!on;
  if(Date.now()-touched<2500)return;
  fill($('rseg'),segs,function(v){return 'New file every '+v+' min'});
  fill($('rlim'),lims,function(v){return v?'Keep up to '+v+' GB':'Use all free space'});
- $('ron').checked=r.enabled;$('rseg').value=r.segmentMin;$('rlim').value=r.limitGB;
- $('ron').disabled=$('rseg').disabled=$('rlim').disabled=!st.canWrite;
+ fill($('rwhere'),['auto','phone','sd'].concat(r.customFolder?['custom']:[]),function(v){return wheres[v]});
+ $('roo').checked=r.onOpen;$('rseg').value=r.segmentMin;$('rlim').value=r.limitGB;$('rwhere').value=r.mode;
+ $('roo').disabled=$('rseg').disabled=$('rlim').disabled=$('rwhere').disabled=!st.canWrite;
 }
 function recList(){
  fetch('/recordings').then(function(r){return r.json()}).then(function(j){
@@ -335,7 +339,9 @@ function recPost(path,body,msg){
 }
 $('rsave').onclick=function(){recPost('/recordings/save','','Clip saved: the current file and the one before it are kept')};
 $('rref').onclick=recList;
-$('ron').onchange=function(){touched=Date.now();send('record='+(this.checked?'on':'off'))};
+$('rbtn').onclick=function(){send('record='+(st&&st.recording&&st.recording.enabled?'off':'on'));setTimeout(recList,3000)};
+$('roo').onchange=function(){touched=Date.now();send('recordonopen='+(this.checked?'on':'off'))};
+$('rwhere').onchange=function(){touched=Date.now();send('location='+this.value);setTimeout(recList,2500)};
 $('rseg').onchange=function(){touched=Date.now();send('segment='+this.value)};
 $('rlim').onchange=function(){touched=Date.now();send('storage='+(this.value=='0'?'all':this.value))};
 $('rlist').onclick=function(e){var a=e.target;if(!a.getAttribute||!a.getAttribute('data-n'))return;
