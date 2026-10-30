@@ -411,7 +411,7 @@ namespace W10MDashcam.Recording
             long size = s.Writer.BytesWritten;
             Log(string.Format("Recording: {0} done ({1:0.0} min, {2:0.0} MB)", s.Name, s.Writer.Duration / (double)Second / 60, size / 1048576.0));
             if (State == "recording") State = Enabled ? "starting the next file" : "off";
-            if (s.Protect) await MoveToSavedAsync(s.File);
+            if (s.Protect) await SaveOrQueueAsync(s.File);
             else
             {
                 _segments.Add(new RecordingInfo { Name = s.Name, Size = size });
@@ -433,24 +433,92 @@ namespace W10MDashcam.Recording
                     var props = await f.GetBasicPropertiesAsync();
                     if (_seg != null || (DateTimeOffset.Now - props.DateModified).TotalMinutes < 10)
                     {
-                        if (await MoveToSavedAsync(f)) { _segments.Remove(prev); UpdateTotals(); kept.Add(prev.Name); }
+                        await SaveOrQueueAsync(f);
+                        _segments.Remove(prev); // kept either way: moved now, or protected until the move succeeds
+                        UpdateTotals();
+                        kept.Add(prev.Name);
                     }
                 }
                 catch (Exception ex) { Log("Save clip: " + prev.Name + ": " + ex.Message); }
             }
+            bool again = _seg != null && _seg.Protect && kept.Count == 0;
             if (_seg != null) { _seg.Protect = true; kept.Add(_seg.Name + " (kept when it ends)"); }
-            Log(kept.Count > 0 ? "Clip saved: " + string.Join(", ", kept) : "Save clip: nothing recorded yet");
+            Log(again ? "Clip already saved: " + _seg.Name + " (kept when it ends)"
+                : kept.Count > 0 ? "Clip saved: " + string.Join(", ", kept) : "Save clip: nothing recorded yet");
         }
 
-        private async Task<bool> MoveToSavedAsync(StorageFile f)
+        // ---- saved clips whose move is still pending: right after a file closes, the phone's media indexer
+        // (library folders such as Videos) or a download can still have it open. Such a clip stays where it is,
+        // is never loop-deleted, and the move is retried (also after an app restart: kept in the settings).
+        private sealed class PendingSave { public string Folder, Name; public int Tries; public DateTime Next; }
+        private List<PendingSave> _pending;
+        private const string PendingKey = "RecPendingSaves";
+
+        private void LoadPending()
         {
+            if (_pending != null) return;
+            _pending = new List<PendingSave>();
+            try
+            {
+                var text = ApplicationData.Current.LocalSettings.Values[PendingKey] as string ?? "";
+                foreach (var line in text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    int bar = line.LastIndexOf('|');
+                    if (bar > 0) _pending.Add(new PendingSave { Folder = line.Substring(0, bar), Name = line.Substring(bar + 1), Next = DateTime.UtcNow });
+                }
+            }
+            catch { }
+        }
+
+        private void StorePending()
+        {
+            try { ApplicationData.Current.LocalSettings.Values[PendingKey] = string.Join("\n", _pending.Select(x => x.Folder + "|" + x.Name)); }
+            catch { }
+        }
+
+        private bool IsPending(string name) => _pending != null && _loop != null && _pending.Any(x => x.Name == name && x.Folder == _loop.Path);
+
+        /// <summary>Moves a clip to Saved now, or queues the move if the file is still busy.</summary>
+        private async Task SaveOrQueueAsync(StorageFile f)
+        {
+            LoadPending();
             try
             {
                 await f.MoveAsync(_saved, f.Name, NameCollisionOption.GenerateUniqueName);
                 SavedClips++;
-                return true;
             }
-            catch (Exception ex) { Log("Moving " + f.Name + " to Saved failed: " + ex.Message); return false; }
+            catch (FileNotFoundException) { }
+            catch (Exception ex)
+            {
+                Log("Saved clip " + f.Name + " is busy (" + ex.Message.Split('\r', '\n')[0] + ") - it is kept, and moved to Saved as soon as it is free");
+                _pending.Add(new PendingSave { Folder = _loop.Path, Name = f.Name, Tries = 1, Next = DateTime.UtcNow.AddSeconds(2) });
+                StorePending();
+            }
+        }
+
+        private async Task RetryPendingAsync()
+        {
+            if (_pending == null || _pending.Count == 0 || _loop == null) return;
+            var now = DateTime.UtcNow;
+            foreach (var p in _pending.Where(x => x.Folder == _loop.Path && x.Next <= now).ToList())
+            {
+                try
+                {
+                    var f = await _loop.GetFileAsync(p.Name);
+                    await f.MoveAsync(_saved, f.Name, NameCollisionOption.GenerateUniqueName);
+                    SavedClips++;
+                    _pending.Remove(p);
+                    Log("Saved clip " + p.Name + " moved to Saved" + (p.Tries > 1 ? " (after " + p.Tries + " tries)" : ""));
+                }
+                catch (FileNotFoundException) { _pending.Remove(p); }
+                catch (Exception)
+                {
+                    p.Tries++;
+                    p.Next = now.AddSeconds(Math.Min(60, 2 << Math.Min(p.Tries, 5)));
+                    if (p.Tries == 10) Log("Saved clip " + p.Name + " is still busy - keeps trying every minute (it stays protected)");
+                }
+            }
+            StorePending();
         }
 
         private async Task FailAsync(string message)
@@ -477,6 +545,7 @@ namespace W10MDashcam.Recording
                 State = Enabled ? "waiting for video" : "off";
             }
             if (_seg == null && _lastVideoTime < 0) State = Enabled ? (string.IsNullOrEmpty(LastError) ? "waiting for video" : "error") : "off";
+            if (_root != null) await RetryPendingAsync();
             if (_root != null && DateTime.UtcNow >= _nextHousekeep) await HousekeepAsync();
         }
 
@@ -526,9 +595,11 @@ namespace W10MDashcam.Recording
             _loop = root;
             _saved = await root.CreateFolderAsync("Saved", CreationCollisionOption.OpenIfExists);
             _segments.Clear();
+            LoadPending();
             foreach (var f in (await _loop.GetFilesAsync()).Where(x => OwnName.IsMatch(x.Name)).OrderBy(x => x.Name))
             {
                 if (_seg != null && f.Name == _seg.Name) continue;
+                if (IsPending(f.Name)) continue; // a saved clip waiting to be moved: never loop-deleted
                 var p = await f.GetBasicPropertiesAsync();
                 _segments.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
             }
