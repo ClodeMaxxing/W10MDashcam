@@ -84,6 +84,8 @@ namespace W10MDashcam.Recording
         private DateTime _lastFrameAt = DateTime.MinValue;
         private bool _waitedForKey;
         private List<AudioSample> _carryAudio; // audio after the last file's end, for the next file
+        private string _lastClosed;            // the loop file that ended right before the current one (Save clip keeps it once)
+        private bool _lastClosedKnown;         // set once: after an app restart the newest loop file counts as the previous one
 
         private sealed class Segment
         {
@@ -417,16 +419,20 @@ namespace W10MDashcam.Recording
                 _segments.Add(new RecordingInfo { Name = s.Name, Size = size });
                 UpdateTotals();
             }
+            _lastClosed = s.Protect ? null : s.Name;
+            _lastClosedKnown = true;
         }
 
         private async Task SaveAsync()
         {
             await EnsureFoldersAsync();
             var kept = new List<string>();
-            if (_segments.Count > 0)
+            // The file just before the current one (the moments before) - only that one, and only once:
+            // pressing again must not walk back through older files.
+            var prev = _lastClosed == null ? null : _segments.FirstOrDefault(x => x.Name == _lastClosed);
+            if (prev != null)
             {
-                // the previous file (the moments before) - unless it ended long ago
-                var prev = _segments[_segments.Count - 1];
+                _lastClosed = null;
                 try
                 {
                     var f = await _loop.GetFileAsync(prev.Name);
@@ -603,6 +609,7 @@ namespace W10MDashcam.Recording
                 var p = await f.GetBasicPropertiesAsync();
                 _segments.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
             }
+            if (!_lastClosedKnown) { _lastClosedKnown = true; _lastClosed = _segments.LastOrDefault()?.Name; }
             SavedClips = (await _saved.GetFilesAsync()).Count(x => x.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase));
             _root = root;
             if (Location != where) Log("Recordings: " + where + ", " + _segments.Count + " loop files, " + SavedClips + " saved");

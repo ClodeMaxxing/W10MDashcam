@@ -307,7 +307,7 @@ function recRender(){
  $('rdot').className='dot'+(on?' rec':'');$('rstate').className='state'+(on?' rec':'');
  $('rstate').textContent=on?'REC '+hms(r.seconds):r.state;
  $('rloc').textContent=r.location?r.location.split(' (')[0]:'';
- var i=r.error&&r.state=='error'?r.error:(r.files+' loop files, '+mb(r.usedMB*1048576)+(r.freeMB!=null?', '+mb(r.freeMB*1048576)+' free':'')+(r.saved?', '+r.saved+' saved':''));
+ var i=r.error&&r.state=='error'?r.error:('Saved clips: '+r.saved+' \u2013 loop: '+r.files+' older file'+(r.files==1?'':'s')+' ('+mb(r.usedMB*1048576)+')'+(r.freeMB!=null?' \u2013 '+mb(r.freeMB*1048576)+' free':''));
  if(r.dropped)i+=' - '+r.dropped+' frames dropped (storage too slow)';
  if(on&&r.writeMBps)i+=' - writing '+r.writeMBps.toFixed(1)+' MB/s';
  $('rinfo').textContent=r.enabled?i:'Recording is stopped';

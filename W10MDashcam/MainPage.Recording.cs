@@ -280,9 +280,9 @@ namespace W10MDashcam
             var r = _recorder;
             if (!string.IsNullOrEmpty(r.LastError) && r.State == "error") return r.LastError;
             if (string.IsNullOrEmpty(r.Location)) return r.Enabled ? "Starts with the camera" : "Recording is stopped";
-            string s = string.Format(CultureInfo.InvariantCulture, "{0} files, {1:0.0} GB", r.LoopCount, r.LoopBytes / 1073741824.0);
-            if (r.FreeBytes >= 0) s += string.Format(CultureInfo.InvariantCulture, ", {0:0.0} GB free", r.FreeBytes / 1073741824.0);
-            if (r.SavedClips > 0) s += ", " + r.SavedClips + " saved";
+            string s = string.Format(CultureInfo.InvariantCulture, "Saved clips: {0}  -  loop: {1} older file{2} ({3:0.0} GB)",
+                r.SavedClips, r.LoopCount, r.LoopCount == 1 ? "" : "s", r.LoopBytes / 1073741824.0);
+            if (r.FreeBytes >= 0) s += string.Format(CultureInfo.InvariantCulture, "  -  {0:0.0} GB free", r.FreeBytes / 1073741824.0);
             if (r.DroppedFrames > 0) s += " - " + r.DroppedFrames + " frames dropped (storage too slow)";
             return s;
         }
