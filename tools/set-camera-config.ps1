@@ -1,7 +1,7 @@
 param(
   [string]$Body = ''   # e.g. "user=admin&password=secret" or "udp=on"; empty = ask interactively
 )
-# Changes W10MSecurityCam settings over the USB cable (the phone only accepts settings over USB).
+# Changes W10MDashcam settings over the USB cable (the phone only accepts settings over USB).
 # Fields: user, password (empty = no login), basic=on|off, udp=on|off, snapshot=on|off
 $url = 'http://127.0.0.1:8020/config'
 $wc = New-Object System.Net.WebClient

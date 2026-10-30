@@ -3,7 +3,7 @@
 # (Settings > Update & security > For developers > Pair). Leave it running while the phone streams; stop with Ctrl+C.
 param([string]$Pair, [int]$Seconds = 60)
 $ip  = (Get-Content "$PSScriptRoot\phone-ip.txt" -TotalCount 1).Trim()
-$dir = Join-Path $env:LOCALAPPDATA 'W10MSecurityCam'; New-Item -ItemType Directory -Force $dir | Out-Null
+$dir = Join-Path $env:LOCALAPPDATA 'W10MDashcam'; New-Item -ItemType Directory -Force $dir | Out-Null
 $jar = Join-Path $dir 'portal.jar'                     # session cookie; kept outside the repository
 $csv = Join-Path $PSScriptRoot 'portal-monitor.csv'
 function Csrf { ((Select-String -Path $jar -Pattern 'CSRF-Token').Line -split "`t")[-1] }

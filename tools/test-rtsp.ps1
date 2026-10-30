@@ -55,7 +55,7 @@ function Fill([int]$timeoutMs) {
 
 function Send([string]$method, [string]$reqUrl, [string[]]$extra) {
   $script:cseq++
-  $text = "$method $reqUrl RTSP/1.0`r`nCSeq: $($script:cseq)`r`nUser-Agent: W10MSecurityCam-test`r`n"
+  $text = "$method $reqUrl RTSP/1.0`r`nCSeq: $($script:cseq)`r`nUser-Agent: W10MDashcam-test`r`n"
   foreach ($h in $extra) { $text += "$h`r`n" }
   $a = AuthHeader $method $reqUrl
   if ($a) { $text += "$a`r`n" }

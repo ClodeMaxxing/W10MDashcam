@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title W10MSecurityCam - Install on phone (no rebuild)
+title W10MDashcam - Install on phone (no rebuild)
 set ROOT=%~dp0..
 set LOG=%~dp0install-log.txt
 set PHONE=
@@ -12,7 +12,7 @@ set MSBUILD=%ProgramFiles(x86)%\Microsoft Visual Studio\2019\Community\MSBuild\C
 
 echo [2/3] Collecting package...
 set APPX=
-for /r "%ROOT%\out" %%f in (W10MSecurityCam_*_ARM.appx) do set "APPX=%%f"
+for /r "%ROOT%\out" %%f in (W10MDashcam_*_ARM.appx) do set "APPX=%%f"
 for %%f in ("%APPX%") do set "PKGDIR=%%~dpf"
 echo Package: %APPX% >> "%LOG%"
 set DEP1=%PKGDIR%Dependencies\arm\Microsoft.NET.Native.Framework.1.7.appx
@@ -23,16 +23,16 @@ set WADC=
 for /f "delims=" %%i in ('where /r "%ProgramFiles(x86)%\Windows Kits\10\bin" WinAppDeployCmd.exe 2^>nul') do set "WADC=%%i"
 
 echo [3/3] Installing on phone - trying USB first...
-"%WADC%" install -file "%APPX%" -ip 127.0.0.1 -dependency "%DEP1%" "%DEP2%" "%DEP3%" > "%TEMP%\w10msecuritycam_deploy.txt" 2>&1
+"%WADC%" install -file "%APPX%" -ip 127.0.0.1 -dependency "%DEP1%" "%DEP2%" "%DEP3%" > "%TEMP%\w10mdashcam_deploy.txt" 2>&1
 set RC=%errorlevel%
 echo USB deploy exit %RC% >> "%LOG%"
 if not %RC%==0 (
   echo  USB deploy failed, trying Wi-Fi %PHONE%...
-  "%WADC%" install -file "%APPX%" -ip %PHONE% -dependency "%DEP1%" "%DEP2%" "%DEP3%" > "%TEMP%\w10msecuritycam_deploy.txt" 2>&1
+  "%WADC%" install -file "%APPX%" -ip %PHONE% -dependency "%DEP1%" "%DEP2%" "%DEP3%" > "%TEMP%\w10mdashcam_deploy.txt" 2>&1
   call set RC=%%errorlevel%%
 )
-type "%TEMP%\w10msecuritycam_deploy.txt" >> "%LOG%"
-findstr /i /c:"pin" "%TEMP%\w10msecuritycam_deploy.txt" >nul
+type "%TEMP%\w10mdashcam_deploy.txt" >> "%LOG%"
+findstr /i /c:"pin" "%TEMP%\w10mdashcam_deploy.txt" >nul
 if %errorlevel%==0 (
   echo.
   echo  The phone needs pairing again. On the phone: Settings - Update and security -

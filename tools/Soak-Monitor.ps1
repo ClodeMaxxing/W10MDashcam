@@ -22,7 +22,7 @@ if (-not $Phone -and -not $ReportOnly) { throw 'Give -Phone ADDRESS or put the p
 $dir = Join-Path $PSScriptRoot 'soak'; New-Item -ItemType Directory -Force $dir | Out-Null
 if (-not $Csv) { $Csv = Join-Path $dir ('soak-' + (Get-Date -Format 'yyyyMMdd-HHmm') + '.csv') }
 $Html = [IO.Path]::ChangeExtension($Csv, '.html')
-$jar = Join-Path $env:LOCALAPPDATA 'W10MSecurityCam\portal.jar'   # optional Device Portal pairing (Monitor-Portal.ps1 -Pair)
+$jar = Join-Path $env:LOCALAPPDATA 'W10MDashcam\portal.jar'   # optional Device Portal pairing (Monitor-Portal.ps1 -Pair)
 
 $cols = 'time,ok,version,streaming,fps,mbps,viewers,format,bitrate,engine,latency_ms,battery_pct,battery_status,charging,net_w,draw_w,heat,heat_warn,protect,cpu_phone,cpu_app,memory_mb,wifi_bars,uptime_s,blackout,previewing,gpu_max_pct'
 if (-not (Test-Path $Csv)) { $cols | Out-File $Csv -Encoding ascii }
@@ -61,7 +61,7 @@ function Write-Report {
 
 $script:Template = @'
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>/*TITLE*/ - W10MSecurityCam soak</title>
+<title>/*TITLE*/ - W10MDashcam soak</title>
 <style>
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#000;color:#d6e8d9;margin:0;padding:18px 22px}
 h1{font-size:20px;margin:0;color:#e4f5e7}h1 small{font-size:12px;color:#39ff14;margin-left:10px}
@@ -78,7 +78,7 @@ canvas{width:100%;height:170px;display:block}
 .legend{font-size:11px;color:#7f9a86;margin-top:2px}.legend span{margin-right:12px}.legend span::before{content:'';display:inline-block;width:10px;height:3px;margin-right:4px;vertical-align:middle;background:var(--c)}
 #tip{position:fixed;pointer-events:none;background:#0b1a10;border:1px solid #2e7d46;border-radius:6px;padding:6px 8px;font-size:12px;display:none;white-space:pre;font-family:Consolas,monospace;z-index:9}
 </style></head><body>
-<h1>W10MSecurityCam soak<small id="ver"></small></h1><div class="sub" id="span"></div>
+<h1>W10MDashcam soak<small id="ver"></small></h1><div class="sub" id="span"></div>
 <div class="sum" id="sum"></div><div class="charts" id="charts"></div><div id="tip"></div>
 <script>
 var COLS=/*COLS*/.split(','),LIVE=/*LIVE*/,ROWS=[
