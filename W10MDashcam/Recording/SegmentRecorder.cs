@@ -1183,17 +1183,25 @@ namespace W10MDashcam.Recording
 
             int deleted = 0;
             long freed = 0;
-            while (_segments.Count > 0 && (used > LimitBytes || (FreeBytes >= 0 && FreeBytes - headroom < MinFreeBytes)))
+            int next = 0; // files that could not be deleted (e.g. being downloaded) stay listed and are skipped this time
+            while (next < _segments.Count && (used > LimitBytes || (FreeBytes >= 0 && FreeBytes - headroom < MinFreeBytes)))
             {
-                var old = _segments[0];
-                _segments.RemoveAt(0);
+                var old = _segments[next];
                 try
                 {
                     var f = await _loop.GetFileAsync(old.Name);
                     await f.DeleteAsync(StorageDeleteOption.PermanentDelete);
                 }
                 catch (FileNotFoundException) { }
-                catch (Exception ex) { Log("Loop delete of " + old.Name + " failed: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    // Still on the card: keep it listed and counted (it used to be dropped from the list and its space
+                    // counted as freed, leaving an orphan and a wrong free-space figure). Retried at the next clean-up.
+                    Log("Loop delete of " + old.Name + " failed, kept for the next clean-up: " + ex.Message);
+                    next++;
+                    continue;
+                }
+                _segments.RemoveAt(next);
                 used -= old.Size;
                 if (FreeBytes >= 0) FreeBytes += old.Size;
                 freed += old.Size;
