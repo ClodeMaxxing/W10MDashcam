@@ -181,7 +181,8 @@ namespace W10MDashcam
         private string GpsConfigText() =>
             "gps=" + (_gpsOn ? "on" : "off") + " (" + _gps.Status + "), units=" + _units + " (" + (Mph ? "mph" : "km/h") + "), subtitles=" + (_recorder.Subtitles ? "on" : "off") + "\n";
 
-        private void AddGpsJson(JsonObject j)
+        /// <summary>position: false for /status (monitoring needs no whereabouts); the web page gets it.</summary>
+        private void AddGpsJson(JsonObject j, bool position = true)
         {
             var f = _gps.Running ? _gps.Latest : null;
             var g = new JsonObject();
@@ -195,10 +196,13 @@ namespace W10MDashcam
             {
                 var fx = f.Value;
                 g["speed"] = fx.SpeedMs.HasValue ? JsonValue.CreateNumberValue(Math.Round(fx.SpeedMs.Value * (Mph ? 2.236936 : 3.6))) : JsonValue.CreateNullValue();
-                g["lat"] = JsonValue.CreateNumberValue(Math.Round(fx.Lat, 6));
-                g["lon"] = JsonValue.CreateNumberValue(Math.Round(fx.Lon, 6));
-                g["accuracy"] = JsonValue.CreateNumberValue(Math.Round(fx.Accuracy));
-                g["heading"] = fx.Heading.HasValue ? JsonValue.CreateStringValue(Compass(fx.Heading.Value)) : JsonValue.CreateNullValue();
+                if (position)
+                {
+                    g["lat"] = JsonValue.CreateNumberValue(Math.Round(fx.Lat, 6));
+                    g["lon"] = JsonValue.CreateNumberValue(Math.Round(fx.Lon, 6));
+                    g["accuracy"] = JsonValue.CreateNumberValue(Math.Round(fx.Accuracy));
+                    g["heading"] = fx.Heading.HasValue ? JsonValue.CreateStringValue(Compass(fx.Heading.Value)) : JsonValue.CreateNullValue();
+                }
             }
             j["gps"] = g;
         }

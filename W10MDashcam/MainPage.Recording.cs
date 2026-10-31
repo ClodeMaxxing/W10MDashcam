@@ -680,7 +680,7 @@ namespace W10MDashcam
 
         private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=auto|GB|all, saveclip=1, resume=1, powerloss=SECONDS|off, log=on|off, impact=off|low|medium|high, keepnext=on|off, savedlimit=auto|GB|none, replacesaved=on|off, gps=on|off, units=auto|kmh|mph, subtitles=on|off";
 
-        private void AddRecordingJson(JsonObject o)
+        private void AddRecordingJson(JsonObject o, bool position = true)
         {
             var r = _recorder;
             o["live"] = JsonValue.CreateBooleanValue(_wantLive);
@@ -715,7 +715,7 @@ namespace W10MDashcam
             j["footageMin"] = fm >= 0 ? JsonValue.CreateNumberValue(Math.Round(fm)) : JsonValue.CreateNullValue();
             j["place"] = JsonValue.CreateStringValue(PlaceShort());
             AddPowerLossJson(j);
-            AddSafetyJson(j);
+            AddSafetyJson(j, position);
             o["recording"] = j;
         }
     }

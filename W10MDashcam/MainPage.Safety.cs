@@ -188,7 +188,7 @@ namespace W10MDashcam
             "savedlimit=" + (SavedLimitGb < 0 ? "auto" : SavedLimitGb == 0 ? "none" : SavedLimitGb.ToString()) + " (GB for saved clips), replacesaved=" + (_recorder.ReplaceOldSaved ? "on" : "off") + "\n" +
             GpsConfigText();
 
-        private void AddSafetyJson(JsonObject j)
+        private void AddSafetyJson(JsonObject j, bool position = true)
         {
             j["impact"] = JsonValue.CreateStringValue(_impactSens);
             j["impactAvailable"] = JsonValue.CreateBooleanValue(_impact.Available);
@@ -201,7 +201,7 @@ namespace W10MDashcam
             j["savedLimitGB"] = JsonValue.CreateNumberValue(SavedLimitGb);
             j["replaceSaved"] = JsonValue.CreateBooleanValue(_recorder.ReplaceOldSaved);
             j["warning"] = JsonValue.CreateStringValue(_recorder.Warning ?? "");
-            AddGpsJson(j);
+            AddGpsJson(j, position);
         }
     }
 }

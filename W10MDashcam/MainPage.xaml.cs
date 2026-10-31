@@ -1624,7 +1624,7 @@ namespace W10MDashcam
             int bars = WifiBars();
             o["wifiSignalBars"] = bars >= 0 ? JsonValue.CreateNumberValue(bars) : JsonValue.CreateNullValue();
             o["time"] = JsonValue.CreateStringValue(DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"));
-            AddRecordingJson(o);
+            AddRecordingJson(o, false); // no GPS position in /status
             return o.Stringify();
         }
 
