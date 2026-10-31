@@ -64,7 +64,7 @@ namespace W10MDashcam.Recording
         private const long MaxQueueBytes = 96L << 20;     // ~30 s at 24 Mbps: rides out slow storage / broker calls
         private const long Second = 10000000L;            // 100 ns units
         private const long MaxFragment = 2 * Second;      // a fragment is written at least this often
-        private static readonly Regex SafeName = new Regex(@"^[0-9A-Za-z_\-\. ()]{1,80}\.mp4$");
+        private static readonly Regex SafeName = new Regex(@"^[0-9A-Za-z_\-\. ()]{1,80}\.mp4\z"); // \z: '$' would also allow a trailing newline
         /// <summary>The app's own loop files: 2026-10-30_13-40-05.mp4 (or "... (2).mp4"). Nothing else is ever deleted.</summary>
         private static readonly Regex OwnName = new Regex(@"^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d( \(\d+\))?\.mp4$");
 
