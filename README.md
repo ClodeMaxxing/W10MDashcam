@@ -6,10 +6,11 @@ into every recording, and lets you watch and download recordings from another de
 over RTSP is still there if you want it.
 
 **Compatibility:** tested only on the **Lumia 950** with Windows 10 Mobile 1709, OS build **10.0.15254.603**. Other
-phones may work but are untested. Full guide: the project wiki.
+phones are untested. Full guide: [the project wiki](https://github.com/ClodeMaxxing/W10MDashcam/wiki).
 
-It is a fork of W10MSecurityCam, itself a fork of LumiaCam, now [W10MWebCam](https://github.com/ClodeMaxxing/W10MWebCam) (see Credits). It has its own package identity
-(`W10MDashcam`, CN=W10MDashcam), so it installs beside both. Only one app can use the camera at a time.
+It is a fork of [W10MSecurityCam](https://github.com/ClodeMaxxing/W10MSecurityCam), itself a fork of
+[W10MWebCam](https://github.com/ClodeMaxxing/W10MWebCam) (formerly LumiaCam; see Credits). It has its own package
+identity (`W10MDashcam`, CN=W10MDashcam), so it installs beside both. Only one app can use the camera at a time.
 
 ## Addresses
 
@@ -24,8 +25,8 @@ It is a fork of W10MSecurityCam, itself a fork of LumiaCam, now [W10MWebCam](htt
 
 **Off on a fresh install:** the app is a dashcam first and only records. Switch on *Web page* (and, if wanted, *Log and
 stats pages*) under *Network and login* on the phone; the live view has its own switches. Everything needs the login
-(see Login); over the USB cable no login is needed. Give the phone a fixed address (a DHCP reservation in the router)
-so the page is always at the same place.
+(see Login), over the USB cable too. With *Web page* off the phone serves nothing over HTTP, not even over USB. Give
+the phone a fixed address (a DHCP reservation in the router) so the page is always at the same place.
 
 ## Recording
 
@@ -127,15 +128,20 @@ battery, which heats it. The warnings say so; use a 2 A or better charger.
 
 ## Login
 
-One login protects the page, recordings, `/status`, the log and the live view. A fresh install uses **admin / admin**
-and warns until you change it: on the web page (Login section), on the phone (Network and login), or over USB with
-`tools\Set-Camera-Login.cmd`. An empty password resets it to admin / admin. Digest authentication is used; traffic is
-not encrypted, so use it on a network you trust.
+One login protects the page, recordings and downloads, `/status`, `/config`, the log and the live view, over Wi-Fi and
+over the USB cable alike: any program or web page on the PC the phone is plugged into can reach the USB port. A fresh
+install uses **admin / admin** and warns until you change it: on the web page or on the phone (*Network and login*), or
+over USB with `tools\Set-Camera-Login.cmd` (it asks for the current login first). An empty password resets it to
+admin / admin; it does not remove the login. Forgot it? Set a new one on the phone (*Network and login*). Digest
+authentication is used; traffic is not encrypted, so use it on a network you trust.
 
 ## Settings over USB
 
-`tools\set-camera-config.ps1 -Body "field=value&..."` sends settings over the USB cable (no login needed). The web page
-uses the same fields (`/camera/set`, after signing in, with the header `X-Requested-With: W10MDashcam`).
+`tools\set-camera-config.ps1 -Body "field=value&..."` sends settings to `/config` over the USB cable (`/config` only
+works over USB). It needs the login: give `-User` and `-Password`, or set the environment variables `W10M_USER` and
+`W10M_PASSWORD`; otherwise it asks. The web page uses the same fields (`/camera/set`). Every change (POST), over USB
+too, needs the login, the header `X-Requested-With: W10MDashcam` and the phone's address as `Host` (127.0.0.1 or
+localhost over USB, an IP address over Wi-Fi); the script sends them.
 
 | Fields | Values |
 |---|---|
@@ -153,14 +159,17 @@ uses the same fields (`/camera/set`, after signing in, with the header `X-Reques
 | `testpowerloss` | `1` acts as if the charger were unplugged (for testing), `0` back to normal |
 | Camera and stream | `format=WIDTHxHEIGHT@FPS`, `bitrate=MBPS\|auto`, `highbw`, `audio`, `camera`, `focus`, `exposure`, `wb`, `powersave`, `stream`, `engine=normal`, `udp`, `user`, `password` |
 
-`http://127.0.0.1:8020/config` shows the current values. Recordings over HTTP: `/recordings/file?name=N[&saved=1][&dl=1]`
+`http://127.0.0.1:8020/config` shows the current values (after signing in). Recordings over HTTP: `/recordings/file?name=N[&saved=1][&dl=1]`
 (with byte ranges for seeking), `/recordings/srt?name=N[&saved=1]`, and POST `/recordings/save`, `/recordings/delete`
 (`name`, `saved`), `/recordings/lock`, `/recordings/unlock`, `/recordings/deleteall` (`confirm=DELETE`, `saved=1` to
 include saved clips).
 
 ## Install a release
 
-1. Download `W10MDashcam_<version>_ARM.zip` from the Releases page, unzip it, and check it against `SHA256SUMS.txt`.
+1. Download `W10MDashcam_<version>_ARM.zip` from the
+   [latest release](https://github.com/ClodeMaxxing/W10MDashcam/releases/latest) and unzip it. Ready-built: no
+   compiling and nothing else to download. To check the download, compare the value from
+   `Get-FileHash .\W10MDashcam_<version>_ARM.zip -Algorithm SHA256` (PowerShell) with the release's `SHA256SUMS.txt`.
 2. On the phone: *Settings > Update & security > For developers*: **Developer mode**, **Device discovery** and
    **Device Portal** on.
 3. On a PC on the same Wi-Fi, open the Device Portal address the phone shows, pair with the PIN, then
@@ -168,7 +177,7 @@ include saved clips).
 
 | File | What it is |
 |---|---|
-| `W10MDashcam_<version>.0_ARM.appx` | The app |
+| `W10MDashcam_<version>.0_ARM.appx` | The app (the package version has four parts, for example `0.7.7.0`) |
 | `Dependencies\Microsoft.NET.Native.Framework.1.7.appx` | .NET Native framework 1.7 (ARM) |
 | `Dependencies\Microsoft.NET.Native.Runtime.1.7.appx` | .NET Native runtime 1.7 (ARM) |
 | `Dependencies\Microsoft.VCLibs.ARM.14.00.appx` | Visual C++ runtime 14.00 (ARM), for the native encoder sink |
@@ -176,19 +185,22 @@ include saved clips).
    Without the dependencies the install fails with a missing-framework error (unless another app already installed
    them). They are Microsoft's standard runtime packages, the ones Visual Studio deploys with any .NET Native UWP app.
 4. Open W10MDashcam on the phone and allow the camera, microphone and location. `INSTALL.txt` in the zip and the wiki's
-   *Installation* page have the same steps.
+   [Installation](https://github.com/ClodeMaxxing/W10MDashcam/wiki/Installation) page have the same steps.
+
+To update, install the newer package the same way; settings are kept.
 
 ## Build and install
 
-Same PC setup as W10MWebCam (formerly LumiaCam): VS 2019 with UWP, C++ UWP and ARM tools, SDK 10.0.19041, IP over USB. Bump `Version` in
-`W10MDashcam/Package.appxmanifest` for every install, or the phone refuses it.
+Same PC setup as [W10MWebCam](https://github.com/ClodeMaxxing/W10MWebCam) (formerly LumiaCam): VS 2019 with UWP,
+C++ UWP and ARM tools, SDK 10.0.19041, IP over USB. Bump `Version` in `W10MDashcam/Package.appxmanifest` for every
+install, or the phone refuses it.
 
 | Script | Use |
 |---|---|
 | `tools\Build-And-Deploy.cmd` | Build Release ARM and install on the phone (USB first, then Wi-Fi using `tools\phone-ip.txt`) |
 | `tools\Install-Only.cmd` | Re-install the last build |
-| `tools\Get-Phone-Log.cmd` | Download the phone log |
-| `tools\Set-Camera-Login.cmd`, `tools\set-camera-config.ps1` | Login and settings over USB |
+| `tools\Get-Phone-Log.cmd` | Download the phone log (needs the login, like the two below) |
+| `tools\Set-Camera-Login.cmd`, `tools\set-camera-config.ps1` | Login and settings over USB (`-User`/`-Password` or `W10M_USER`/`W10M_PASSWORD`, otherwise they ask) |
 | `tools\Test-RTSP.cmd`, `tools\test-rtsp.ps1` | Check the live view |
 | `tools\Soak-Monitor.ps1`, `tools\Monitor-Portal.ps1` | Long-run status recorder with an HTML report; Device Portal CPU/GPU/battery log |
 
@@ -198,7 +210,7 @@ Put the phone's IP address in `tools\phone-ip.txt` (one line, not committed). De
 ## Credits
 
 - **[W10MWebCam](https://github.com/ClodeMaxxing/W10MWebCam)** (formerly LumiaCam): the camera engine and the low-latency encoder sink.
-- **W10MSecurityCam:** the RTSP server, login, settings page, status and power monitor, heat protection and theme.
+- **[W10MSecurityCam](https://github.com/ClodeMaxxing/W10MSecurityCam):** the RTSP server, login, settings page, status and power monitor, heat protection and theme.
 - **W10MDashcam:** recording (fragmented MP4 writer, loop recording, saved clips, storage handling), crash detection,
   GPS subtitles, the recordings page and the dashcam screens.
 
