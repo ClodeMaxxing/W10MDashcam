@@ -16,6 +16,7 @@ namespace W10MDashcam.Recording
     {
         private const uint TextTrack = 3;
         private const int TextTimescale = 1000;
+        private const int MaxSamplesPerRun = 100000; // one caption a second: far more than any fragment has
 
         private struct Cue { public long Start, End; public string Text; }
 
@@ -121,7 +122,12 @@ namespace W10MDashcam.Recording
                     if ((flags & 0x1) != 0) { data += unchecked((int)Be32(b, q)); q += 4; }
                     if ((flags & 0x4) != 0) q += 4;
                     long t = decodeTime;
-                    for (uint i = 0; i < count && q <= p + size; i++)
+                    // A damaged or crafted file can claim billions of samples: take only as many as the box can hold (or,
+                    // with nothing stored per sample, as the file can hold), and never more than MaxSamplesPerRun.
+                    int perSample = 4 * (((flags & 0x100) != 0 ? 1 : 0) + ((flags & 0x200) != 0 ? 1 : 0) + ((flags & 0x400) != 0 ? 1 : 0) + ((flags & 0x800) != 0 ? 1 : 0));
+                    long fits = perSample > 0 ? (p + size - q) / perSample : (defaultSize > 0 ? (fileLen - data) / defaultSize : 0);
+                    count = (uint)Math.Max(0, Math.Min(Math.Min(count, fits), MaxSamplesPerRun));
+                    for (uint i = 0; i < count; i++)
                     {
                         uint dur = defaultDuration, len = defaultSize;
                         if ((flags & 0x100) != 0) { dur = Be32(b, q); q += 4; }
