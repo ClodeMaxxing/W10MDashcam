@@ -200,11 +200,14 @@ namespace W10MDashcam
                 if (_selfCheckReset) { _selfCheckReset = false; Log("SELF-CHECK: the app failed to start twice in a row, so its saved settings were reset to defaults (the stream login is kept)."); }
                 Log("Starting camera...");
                 _camera = new CameraEngine { Log = Log, AudioRequested = _audioOn };
+                // The recorder first: the camera raises these events on the native sink's thread, one subscriber after
+                // the other, so live view (packetizing for every viewer) must not delay or (by throwing) skip the
+                // recording. The sink only queues 3 frames before it drops to the next keyframe.
+                WireRecorder(_camera);
                 _camera.AccessUnitReady += _server.SendAccessUnit;
                 _camera.ParameterSetsReady += _server.SetParameterSets;
                 _camera.AudioFrameReady += _server.SendAudio;
                 _camera.AudioFormatReady += _server.SetAudioFormat;
-                WireRecorder(_camera);
                 await _camera.InitializeAsync();
 
                 var formats = _camera.GetRecordFormats();
