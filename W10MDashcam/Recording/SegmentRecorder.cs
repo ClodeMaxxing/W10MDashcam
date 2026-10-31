@@ -350,6 +350,8 @@ namespace W10MDashcam.Recording
                         if (_seg != null) await CloseAsync(-1);
                         _lastVideoTime = -1;
                         _root = null;
+                        _retryAfter = DateTime.MinValue; // a new place: try at once (the last place's error does not apply)
+                        LastError = "";
                         await EnsureFoldersAsync();
                         break;
                     case Cmd.Rescan:
@@ -456,6 +458,24 @@ namespace W10MDashcam.Recording
             try
             {
                 await EnsureFoldersAsync();
+                // Don't start a file on storage that is already full and has nothing of ours to delete: a few seconds
+                // of 4K would use up the last free space (and the next retry would do it again).
+                long free = await GetFreeSpaceAsync(_loop);
+                if (free >= 0) FreeBytes = free;
+                if (free >= 0 && free < MinFreeBytes / 2 && _scanning)
+                {
+                    // short of space and the folder list is not ready: wait for it before deciding (no file meanwhile)
+                    _retryAfter = DateTime.UtcNow.AddSeconds(2);
+                    return false;
+                }
+                long reclaimable = LoopBytes + (ReplaceOldSaved ? SavedBytes : 0);
+                bool canMakeRoom = free + reclaimable >= MinFreeBytes / 2;
+                if (free >= 0 && free < MinFreeBytes / 2 && !canMakeRoom)
+                {
+                    await FailAsync(FullMessage());
+                    _retryAfter = DateTime.UtcNow.AddSeconds(60);
+                    return false;
+                }
                 string name = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss") + ".mp4";
                 var file = await _loop.CreateFileAsync(name, CreationCollisionOption.GenerateUniqueName);
                 // Others may read the file while it is written (downloads of the current recording).
@@ -752,12 +772,20 @@ namespace W10MDashcam.Recording
             StorePending();
         }
 
+        /// <summary>Why the storage is full: our saved clips, or other files (then deleting clips would not help).</summary>
+        private string FullMessage() => string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            SavedBytes >= 256L << 20
+                ? "Recording stopped: the storage is full ({0:0} MB free) and only saved clips are left. Delete some, or allow replacing the oldest saved clips."
+                : "Recording stopped: the storage is full ({0:0} MB free) - other files, not recordings, use the space. Free some space on it, or choose another place under Save recordings to.",
+            Math.Max(0, FreeBytes) / 1048576.0);
+
         private async Task FailAsync(string message)
         {
             if (_cutRequested) { _cutRequested = false; RaiseClip(false, "Clip not saved: " + message); }
+            bool repeat = LastError == message;
             LastError = message;
             State = "error";
-            Log(message);
+            if (!repeat) Log(message); // the same problem every retry: logged once
             var s = _seg;
             _seg = null;
             if (s != null) { try { s.Stream.Dispose(); } catch { } _segments.Add(new RecordingInfo { Name = s.Name, Size = s.Writer.BytesWritten }); }
@@ -827,6 +855,7 @@ namespace W10MDashcam.Recording
             _loop = root;
             _saved = await root.CreateFolderAsync("Saved", CreationCollisionOption.OpenIfExists);
             _segments.Clear();
+            SavedBytes = 0; // measured again by the scan below, for this place
             LoadPending();
             _root = root;
             if (Location != where) Log("Recordings: " + where);
@@ -849,7 +878,11 @@ namespace W10MDashcam.Recording
                         var p = await f.GetBasicPropertiesAsync();
                         result.Loop.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
                     }
-                    result.Saved = (await ListMp4Async(saved)).Count;
+                    foreach (var f in await ListMp4Async(saved))
+                    {
+                        result.Saved++;
+                        result.SavedBytes += (long)(await f.GetBasicPropertiesAsync()).Size;
+                    }
                     result.Free = await GetFreeSpaceAsync(loop);
                 }
                 catch (Exception ex) { result.Error = ex.Message; }
@@ -863,6 +896,7 @@ namespace W10MDashcam.Recording
             public int Gen;
             public readonly List<RecordingInfo> Loop = new List<RecordingInfo>();
             public int Saved;
+            public long SavedBytes;
             public long Free = -1;
             public double Seconds;
             public string Error;
@@ -889,6 +923,7 @@ namespace W10MDashcam.Recording
                 _lastClosed = r.Loop.Where(x => _seg == null || x.Name != _seg.Name).Select(x => x.Name).LastOrDefault();
             }
             SavedClips = r.Saved;
+            SavedBytes = r.SavedBytes;
             if (r.Free >= 0) FreeBytes = r.Free;
             UpdateTotals();
             Log(string.Format(System.Globalization.CultureInfo.InvariantCulture, "Recordings: {0} loop files, {1} saved (listed in {2:0.0} s, in the background)",
@@ -967,13 +1002,14 @@ namespace W10MDashcam.Recording
             bool storageShort = FreeBytes >= 0 && FreeBytes < MinFreeBytes * 2 && _segments.Count == 0;
             Warning = SavedFull ? string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "Saved clips use {0:0.0} GB, over their {1:0} GB - delete some, or allow replacing the oldest", SavedBytes / 1073741824.0, SavedLimitBytes / 1073741824.0)
-                : storageShort ? "Storage nearly full: only saved clips are left to make room"
+                : storageShort ? (SavedBytes >= 256L << 20 ? "Storage nearly full: only saved clips are left to make room"
+                                : "Storage nearly full: other files, not recordings, use the space")
                 : "";
 
             if (FreeBytes >= 0 && FreeBytes < MinFreeBytes / 2 && _segments.Count == 0 && _seg != null)
             {
                 await CloseAsync(-1);
-                await FailAsync("Recording stopped: the storage is full of saved clips. Delete some, or allow replacing the oldest saved clips.");
+                await FailAsync(FullMessage());
                 _retryAfter = DateTime.UtcNow.AddSeconds(60);
             }
         }
