@@ -74,7 +74,7 @@ namespace W10MDashcam.Streaming
                     }
                     string body = Encoding.UTF8.GetString(bytes, headerEnd + 4, Math.Min(bodyLen, bytes.Length - headerEnd - 4));
                     bool fromUsb = socket.Information.RemoteAddress?.DisplayName == "127.0.0.1";
-                    var request = HttpApi.Parse(lines[0], headers, body, fromUsb);
+                    var request = HttpApi.Parse(lines[0], headers, body, fromUsb, socket.Information.RemoteAddress?.DisplayName);
                     var file = await _api.TryOpenFileAsync(request);
                     if (file != null)
                     {

@@ -27,6 +27,7 @@ namespace W10MDashcam.Rtsp
         private readonly RtspServer _server;
         private readonly StreamSocket _socket;
         private readonly string _who;
+        private readonly string _ip;
         private readonly Random _rand = new Random(Guid.NewGuid().GetHashCode());
 
         // RTSP session state
@@ -89,6 +90,7 @@ namespace W10MDashcam.Rtsp
             _socket = socket;
             try { _socket.Control.NoDelay = true; } catch { }
             string ip = socket.Information.RemoteAddress?.DisplayName ?? "?";
+            _ip = ip;
             _who = ip == "127.0.0.1" ? "PC over USB" : ip;
             for (int i = 0; i < 2; i++)
             {
@@ -263,12 +265,14 @@ namespace W10MDashcam.Rtsp
             if (!_announced) { _announced = true; Log("connected"); }
             string cseq = h.TryGetValue("CSeq", out var c) ? c : "0";
 
-            if (method != "OPTIONS" && _server.Auth.Enabled)
+            if (method != "OPTIONS")
             {
                 h.TryGetValue("Authorization", out var authorization);
-                if (!_server.Auth.Check(method, authorization, out bool stale))
+                bool locked = _server.Auth.IsLockedOut(_ip); // too many wrong logins: 401 without looking
+                bool stale = false;
+                if (locked || !_server.Auth.Check(method, url, authorization, _ip, out stale))
                 {
-                    if (!string.IsNullOrEmpty(authorization) && !stale) Log("wrong user name or password");
+                    if (!string.IsNullOrEmpty(authorization) && !locked && !stale) Log("wrong user name or password");
                     Respond(cseq, 401, "Unauthorized", _server.Auth.Challenge(stale), "", quiet: true);
                     return true;
                 }
@@ -495,7 +499,7 @@ namespace W10MDashcam.Rtsp
         private async Task SendHttpAsync(string requestLine, Dictionary<string, string> headers, string body)
         {
             bool fromUsb = _socket.Information.RemoteAddress?.DisplayName == "127.0.0.1";
-            var request = W10MDashcam.Streaming.HttpApi.Parse(requestLine, headers, body, fromUsb);
+            var request = W10MDashcam.Streaming.HttpApi.Parse(requestLine, headers, body, fromUsb, _ip);
             // A recording (play / download over USB): streamed in pieces straight to the socket. Nothing else is queued on
             // an HTTP connection, so the writer is idle meanwhile; the connection closes once it is sent.
             var file = _server.Http != null ? await _server.Http.TryOpenFileAsync(request) : null;

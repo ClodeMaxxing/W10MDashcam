@@ -271,7 +271,7 @@ function later(body){clearTimeout(t);t=setTimeout(function(){send(body)},400)}
 $('lb').onclick=function(){
  var u=$('lu').value.trim(),p=$('lp').value;
  if(p!==$('lp2').value){$('msg').textContent='The two passwords differ';return}
- if(p.length<4){$('msg').textContent='The password needs at least 4 characters';return}
+ if(p.length<8){$('msg').textContent='The password needs at least 8 characters';return}
  if(!$('lc').value){$('msg').textContent='Enter the current password too';return}
  var c=$('lc').value;
  $('lc').value=$('lp').value=$('lp2').value='';
