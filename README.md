@@ -8,7 +8,7 @@ over RTSP is still there if you want it.
 **Compatibility:** tested only on the **Lumia 950** with Windows 10 Mobile 1709, OS build **10.0.15254.603**. Other
 phones may work but are untested. Full guide: the project wiki.
 
-It is a fork of W10MSecurityCam, itself a fork of LumiaCam (see Credits). It has its own package identity
+It is a fork of W10MSecurityCam, itself a fork of LumiaCam, now [W10MWebCam](https://github.com/ClodeMaxxing/W10MWebCam) (see Credits). It has its own package identity
 (`W10MDashcam`, CN=W10MDashcam), so it installs beside both. Only one app can use the camera at a time.
 
 ## Addresses
@@ -180,7 +180,7 @@ include saved clips).
 
 ## Build and install
 
-Same PC setup as LumiaCam: VS 2019 with UWP, C++ UWP and ARM tools, SDK 10.0.19041, IP over USB. Bump `Version` in
+Same PC setup as W10MWebCam (formerly LumiaCam): VS 2019 with UWP, C++ UWP and ARM tools, SDK 10.0.19041, IP over USB. Bump `Version` in
 `W10MDashcam/Package.appxmanifest` for every install, or the phone refuses it.
 
 | Script | Use |
@@ -197,7 +197,7 @@ Put the phone's IP address in `tools\phone-ip.txt` (one line, not committed). De
 
 ## Credits
 
-- **LumiaCam:** the camera engine and the low-latency encoder sink.
+- **[W10MWebCam](https://github.com/ClodeMaxxing/W10MWebCam)** (formerly LumiaCam): the camera engine and the low-latency encoder sink.
 - **W10MSecurityCam:** the RTSP server, login, settings page, status and power monitor, heat protection and theme.
 - **W10MDashcam:** recording (fragmented MP4 writer, loop recording, saved clips, storage handling), crash detection,
   GPS subtitles, the recordings page and the dashcam screens.
