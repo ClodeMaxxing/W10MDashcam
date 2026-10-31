@@ -1342,7 +1342,11 @@ namespace W10MDashcam.Recording
                 await f.DeleteAsync(StorageDeleteOption.PermanentDelete);
             }
             catch (FileNotFoundException) { return "not found"; }
-            catch (Exception ex) { return "could not delete it: " + ex.Message.Split('\r', '\n')[0]; }
+            catch (Exception ex)
+            {
+                Log("Delete " + name + " failed: " + ex.Message.Split('\r', '\n')[0]); // the details stay in the log
+                return "could not delete it (in use?) - see the app log";
+            }
             if (saved)
             {
                 var info = _savedList?.FirstOrDefault(x => x.Name == name);

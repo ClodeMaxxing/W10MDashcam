@@ -56,6 +56,7 @@ namespace W10MDashcam.Streaming
         public Func<string> GetConfig = () => "";
         public Func<string> GetCameraJson = () => "{}";
         public DigestAuth Auth;
+        public Action<string> Log = _ => { };
         public SegmentRecorder Recorder;
         /// <summary>The web page is switched on (phone: Network and login). Off: every HTTP request gets "switched off".</summary>
         public volatile bool WebEnabled = true;
@@ -78,6 +79,7 @@ namespace W10MDashcam.Streaming
             return "Saved-clip limit not changed (switched off on the phone).";
         }
 
+        private static byte[] InternalError() => Reply(500, "Internal Server Error", "text/plain", "Internal error, see the app log\n");
         private static byte[] WebOff() => Reply(503, "Service Unavailable", "text/plain", "The web page is switched off on the phone (Network and login).\n");
         private static byte[] LogOff() => Reply(404, "Not Found", "text/plain", "The log and stats pages are switched off (Network and login on the phone, or Network and login on the web page).\n");
 
@@ -140,7 +142,8 @@ namespace W10MDashcam.Streaming
             }
             catch (Exception ex)
             {
-                return Reply(500, "Internal Server Error", "text/plain", ex.Message + "\n");
+                Log("Web request " + r.Method + " " + r.Path + " failed: " + ex.Message); // the details stay in the log
+                return InternalError();
             }
         }
 
@@ -295,13 +298,14 @@ namespace W10MDashcam.Streaming
                 var head = Encoding.ASCII.GetBytes(
                     "HTTP/1.0 " + code + (code == 206 ? " Partial Content" : " OK") + "\r\n" +
                     "Content-Type: video/mp4\r\n" +
-                    "Content-Length: " + len + "\r\n" + extra +
+                    "Content-Length: " + len + "\r\n" + extra + SecurityHeaders +
                     "Connection: close\r\n\r\n");
                 return new FileReply { Head = head, Body = body, Length = len };
             }
             catch (Exception ex)
             {
-                return new FileReply { Error = Reply(500, "Internal Server Error", "text/plain", ex.Message + "\n") };
+                Log("Web request " + r.Method + " " + r.Path + " failed: " + ex.Message);
+                return new FileReply { Error = InternalError() };
             }
         }
 
@@ -420,6 +424,9 @@ namespace W10MDashcam.Streaming
             };
         }
 
+        /// <summary>No framing by other sites (clickjacking the settings page), no guessing of content types.</summary>
+        private const string SecurityHeaders = "X-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\nX-Content-Type-Options: nosniff\r\n";
+
         public static byte[] Reply(int code, string reason, string contentType, string body, string extraHeaders = "")
             => Reply(code, reason, contentType, Encoding.UTF8.GetBytes(body ?? ""), extraHeaders);
 
@@ -429,6 +436,7 @@ namespace W10MDashcam.Streaming
                 "HTTP/1.0 " + code + " " + reason + "\r\n" +
                 "Content-Type: " + contentType + "\r\n" +
                 "Content-Length: " + body.Length + "\r\n" +
+                SecurityHeaders +
                 extraHeaders +
                 "Connection: close\r\n\r\n");
             var all = new byte[head.Length + body.Length];
