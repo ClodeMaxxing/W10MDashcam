@@ -74,10 +74,11 @@ button.save{background:#5a1010;color:#ffe0e0;border-color:#a03030;font-weight:bo
 button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,48,48,.4)}
 .files{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
 .files td{border-top:1px solid #16301e;padding:5px 3px;vertical-align:middle}
-.files td.n{font-family:Consolas,'Cascadia Mono',monospace;color:#e4f5e7;word-break:break-all}
+.files td.n{font-family:Consolas,'Cascadia Mono',monospace;color:#e4f5e7;white-space:nowrap}
 .files td.s{color:#7f9a86;white-space:nowrap;text-align:right}
-.files a{color:#9cf0b0;margin-left:6px}.files a.x{color:#ff8a8a;cursor:pointer}.files a.k{color:#e8d040;cursor:pointer}
-.tag{font-size:10px;border-radius:8px;padding:0 6px;margin-left:4px;border:1px solid #2e7d46;color:#39ff14;white-space:nowrap;display:inline-block;word-break:normal}
+.files td.a{text-align:right;line-height:1.8;border-top:1px solid #16301e;padding:5px 3px}.files td.a a{display:inline-block}
+.files a{color:#9cf0b0;margin-left:6px}.files a.x{color:#ff8a8a;cursor:pointer}.files a.k{color:#e8d040;cursor:pointer}.files a.c{color:#7fc8f0}
+.tag{font-size:10px;border-radius:8px;padding:0 6px;margin-left:0;border:1px solid #2e7d46;color:#39ff14;white-space:nowrap;display:inline-block;word-break:normal}
 .tag.r{border-color:#a03030;color:#ff8a8a}
 </style></head><body>
 <h1><span>W10MDashcam</span><span id='ver'></span></h1>
@@ -96,7 +97,7 @@ button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,
 <div class='vrow' style='margin-top:6px'><label><input type='checkbox' id='rgo'> GPS</label><select id='runits'></select><label><input type='checkbox' id='rsub'> Time, speed and position in recordings</label><i class='tip' data-tip='A subtitle track inside each recording: date and time, speed, position and IMPACT markers. VLC and most players show it over the video (Subtitle menu).'>i</i></div>
 <div class='vrow' style='margin-top:6px'><select id='rsl'></select><label><input type='checkbox' id='rrs'> Replace the oldest saved clips when full</label></div>
 <div class='vrow' style='margin-top:6px'><select id='rwhere'></select><i class='tip' data-tip='Where new recordings go. A folder of your own is chosen on the phone (Recording > Choose folder). The list below shows the current place only.'>i</i></div>
-<div class='btnrow' style='margin-top:6px'><button id='rref'>Refresh list</button><span class='sub' style='margin:0'>Tap a name to play it. Keep moves a recording to Saved (never deleted); Unlock gives it back to loop recording.</span></div>
+<div class='btnrow' style='margin-top:6px'><button id='rref'>Refresh list</button><span class='sub' style='margin:0'>Tap a name to play it. Captions downloads the time, speed and position as an .srt file: keep it next to the video with the same name. Keep moves a recording to Saved (never deleted); Unlock gives it back to loop recording.</span></div>
 <table class='files' id='rlist'></table></div>
 <h2>Video</h2>
 <div class='bad' id='ta3' style='display:none;font-weight:bold'>THERMAL RECOVERY MODE: video lowered to 1080p / 6 Mbps until charging resumes</div>
@@ -343,9 +344,9 @@ function recList(){
   var h='';
   j.files.forEach(function(f){
    var q='/recordings/file?name='+encodeURIComponent(f.name)+(f.saved?'&saved=1':'');
-   h+='<tr><td class=n><a style=margin:0 href='+q+' target=_blank>'+esc(f.name.replace('.mp4','').replace(/^(\d{4}-\d\d-\d\d)_(\d\d)-(\d\d)-(\d\d)/,'$1 $2:$3:$4'))+'</a>'
-    +(f.saved?'<span class=tag>'+esc(f.note||'saved')+'</span>':'')+(f.recording?'<span class=""tag r"">recording</span>':'')+'</td>'
-    +'<td class=s>'+mb(f.size)+'</td><td class=s><a href='+q+'&dl=1>Download</a>'
+   h+='<tr><td class=n><a style=margin:0 href='+q+' target=_blank>'+esc(f.name.replace('.mp4','').replace(/^\d{4}-(\d\d-\d\d)_(\d\d)-(\d\d)-(\d\d)/,'$1 $2:$3:$4'))+'</a>'
+    +(f.saved?'<br><span class=tag>'+esc(f.note||'saved')+'</span>':'')+(f.recording?'<br><span class=""tag r"">recording</span>':'')+'</td>'
+    +'<td class=s>'+mb(f.size)+'</td><td class=a><a href='+q+'&dl=1>Download</a><a class=c href='+q.replace('/file?','/srt?')+' title=""Captions (.srt): save next to the video with the same name"">Captions</a>'
     +(st&&st.canWrite?'<a class=k data-a='+(f.saved?'unlock':'lock')+' data-n='+encodeURIComponent(f.name)+'>'+(f.saved?'Unlock':'Keep')+'</a>':'')
     +(f.recording||!(st&&st.canWrite)?'':'<a class=x data-n='+encodeURIComponent(f.name)+' data-s='+(f.saved?1:0)+'>Delete</a>')+'</td></tr>';
   });

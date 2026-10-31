@@ -91,6 +91,7 @@
     <Compile Include="Recording\SegmentRecorder.cs" />
     <Compile Include="Recording\ImpactDetector.cs" />
     <Compile Include="Recording\GpsTracker.cs" />
+    <Compile Include="Recording\CaptionExport.cs" />
     <Compile Include="MainPage.Gps.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>

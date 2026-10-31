@@ -37,6 +37,7 @@ namespace W10MDashcam.Streaming
     ///   /config       view (GET) or change (POST, form fields) settings - only over the USB cable
     ///   /camera       focus / exposure / white balance page (changes need the stream login, or the USB cable)
     ///   /recordings   the dashcam recordings as JSON; /recordings/file?name=N[&amp;saved=1][&amp;dl=1] plays or downloads one;
+    ///                 /recordings/srt?name=N[&amp;saved=1] its captions as an .srt file;
     ///                 POST /recordings/save keeps the current clip, POST /recordings/delete (name, saved) deletes one
     /// </summary>
     internal sealed class HttpApi
@@ -76,6 +77,9 @@ namespace W10MDashcam.Streaming
 
                 if (path == "/camera" || path == "/camera/state" || path == "/camera/set")
                     return await HandleCameraAsync(r, path);
+
+                if (path == "/recordings/srt")
+                    return await HandleCaptionsAsync(r);
 
                 if (path == "/recordings" || path == "/recordings/save" || path == "/recordings/delete" || path == "/recordings/lock" || path == "/recordings/unlock")
                     return await HandleRecordingsAsync(r, path);
@@ -178,6 +182,27 @@ namespace W10MDashcam.Streaming
             if (path == "/recordings/unlock") { Recorder.Unlock(fname); return Reply(200, "OK", "text/plain", "Unlocking " + fname + "\n"); }
             string err = await Recorder.DeleteAsync(form.TryGetValue("name", out var n) ? n : "", form.TryGetValue("saved", out var sv) && sv == "1");
             return err == null ? Reply(200, "OK", "text/plain", "Deleted\n") : Reply(400, "Bad Request", "text/plain", err + "\n");
+        }
+
+        /// <summary>
+        /// GET /recordings/srt?name=N[&amp;saved=1]: the recording's captions (date/time, speed, position) as an .srt file,
+        /// for players that load captions from a file with the same name as the video.
+        /// </summary>
+        private async Task<byte[]> HandleCaptionsAsync(HttpRequest r)
+        {
+            if (Recorder == null) return Reply(404, "Not Found", "text/plain", "No recorder\n");
+            var q = ParseForm(r.Query);
+            string name = q.TryGetValue("name", out var n) ? n : "";
+            bool saved = q.TryGetValue("saved", out var sv) && sv == "1";
+            using (var body = await Recorder.OpenReadAsync(name, saved))
+            {
+                if (body == null) return Reply(404, "Not Found", "text/plain", "No such recording\n");
+                string srt = await CaptionExport.ToSrtAsync(body);
+                if (srt == null) return Reply(404, "Not Found", "text/plain; charset=utf-8", "This recording has no captions (it was made before version 0.5, or with captions turned off).\n");
+                string srtName = System.IO.Path.GetFileNameWithoutExtension(name) + ".srt";
+                return Reply(200, "OK", "application/x-subrip; charset=utf-8", "\uFEFF" + srt,
+                    "Content-Disposition: attachment; filename=\"" + srtName + "\"\r\nCache-Control: no-store\r\n");
+            }
         }
 
         /// <summary>
