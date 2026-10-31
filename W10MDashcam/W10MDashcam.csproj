@@ -98,7 +98,14 @@
     <Compile Include="MainPage.Safety.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="MainPage.PowerLoss.cs">
+      <DependentUpon>MainPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="MainPage.Servers.cs">
+      <DependentUpon>MainPage.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Streaming\CameraEngine.cs" />
+    <Compile Include="Streaming\StatsPage.cs" />
     <Compile Include="Streaming\Mp4TapStream.cs" />
     <Compile Include="Streaming\Mp4H264Extractor.cs" />
     <Compile Include="Streaming\AvcConfigReader.cs" />

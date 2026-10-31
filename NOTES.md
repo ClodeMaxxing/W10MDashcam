@@ -1,4 +1,49 @@
-# W10MSecurityCam — developer notes (RTSP fork)
+# W10MDashcam — developer notes
+
+The dashcam notes come first; the notes inherited from W10MSecurityCam (camera engine, RTSP, heat, pitfalls) follow
+and still apply.
+
+## Recording: what is where
+
+| File | Role |
+|---|---|
+| `Recording/SegmentRecorder.cs` | The recorder. The camera thread only queues encoded frames (never waits, never throws); one worker writes them. Segments, loop deletion, Save clip, saved clips, storage place and space, incidents (halt / resume), delete all, the web list |
+| `Recording/FragmentedMp4Writer.cs` | ftyp+moov, then moof+mdat per fragment (2 s at most); H.264, AAC, tx3g subtitle track (track 3) |
+| `Recording/CaptionExport.cs` | .srt from a recording's tx3g samples |
+| `Recording/ImpactDetector.cs` | Accelerometer crash detection (gravity removed, one reading over the threshold triggers, 30 s cooldown) |
+| `Recording/GpsTracker.cs` | Geolocator, last 60 s of fixes; `At(utc)` for the subtitles |
+| `MainPage.Recording.cs` | Record / live buttons, Storage section, delete all, format SD, status tiles SPEED / STORAGE, incident banner, config keys |
+| `MainPage.Safety.cs`, `MainPage.Gps.cs` | Crash detection, saved-clip space, GPS UI and subtitle text |
+| `Streaming/HttpApi.cs`, `Streaming/CameraPage.cs` | `/recordings...` routes; the web page (a C# verbatim string: double quotes are doubled) |
+
+## Rules worth remembering (dashcam)
+
+- **Never let storage stall the camera.** Frames are queued (96 MB, about 30 s of 4K) and dropped up to the next
+  keyframe when the writer falls behind. 90+ dropped frames in a minute stops recording with the red warning.
+- **Library folders are slow.** Recording into `Videos\...` let the Windows indexer (SearchIndexer, SearchProtocolHost)
+  load the phone: CPU 49-64% vs 29-35% in the app's own folder, and thousands of dropped frames. Folder queries there
+  take seconds, so the recorder lists folders once (in the background) and keeps the lists in memory; the web list is
+  served from that snapshot. Moving a just-finished file can fail while the indexer holds it: such saves are queued
+  and retried (`RecPendingSaves`).
+- **Only touch our own files:** loop files match `^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d( \(\d+\))?\.mp4$`; nothing else is counted
+  or deleted. Saved clips live in `Saved\`; their reasons are kept in the settings (`RecClipNotes`).
+- **The SD card:** `removableStorage` plus the `.mp4` file type association. Apps see only declared file types there, and
+  cannot format a card: Format SD releases the card (`ReleaseSd`) and opens `ms-settings:storagesense`; the app takes
+  the card back on resume or when it becomes visible again.
+- **Automatic space:** usable = free + loop + saved + the current file; reserve 5% (256 MB-1 GB), saved a fifth
+  (1-8 GB, smaller below 5 GB), loop the rest. Worked out in `ApplyAutoSpace` at each housekeeping pass.
+- **Min SDK is 14393:** avoid newer APIs (for example `ContentDialog.CloseButtonText` needs 15063).
+- **Toggle switches fire `Toggled` when set from code** too: keep the `_loading...` guards around code that sets them.
+- **Line endings:** the sources are CRLF; tools that rewrite a whole file must keep that.
+
+## Testing hooks
+
+- `testincident=1` shows the recording-stopped warning; `resume=1` clears it.
+- `testpowerloss=1` acts as if the charger were unplugged (the countdown starts); `testpowerloss=0` ends it. Power loss
+  is `BatteryStatus.Discharging` only: a heat pause on a charger reports Idle and must not stop recording.
+- `/recordings` lists what the recorder knows; `/camera/state` has `recording.*` (place, limits, footage, halted, incident).
+
+# Inherited: W10MSecurityCam developer notes (RTSP fork)
 
 The sections below this one are the notes inherited from LumiaCam (names such as `LumiaCam/` and port 5000 describe the
 original app). In this fork the app folder is `W10MSecurityCam/`, the video server is `Rtsp/` (RTSP on 8554, USB 8020),
@@ -54,7 +99,7 @@ An uninstall keeps the stream login (password vault) but clears the app settings
 
 ---
 
-# W10MSecurityCam — developer notes
+# Inherited: W10MSecurityCam developer notes
 
 > **W10MSecurityCam fork.** The sections from "Project layout" on are inherited from LumiaCam 1.0 and
 > describe the shared capture pipeline (read `LumiaCam` as `W10MSecurityCam`). What this fork changed is in

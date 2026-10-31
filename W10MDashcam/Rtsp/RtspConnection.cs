@@ -488,6 +488,17 @@ namespace W10MDashcam.Rtsp
         {
             bool fromUsb = _socket.Information.RemoteAddress?.DisplayName == "127.0.0.1";
             var request = W10MDashcam.Streaming.HttpApi.Parse(requestLine, headers, body, fromUsb);
+            // A recording (play / download over USB): streamed in pieces straight to the socket. Nothing else is queued on
+            // an HTTP connection, so the writer is idle meanwhile; the connection closes once it is sent.
+            var file = _server.Http != null ? await _server.Http.TryOpenFileAsync(request) : null;
+            if (file != null)
+            {
+                try { await W10MDashcam.Streaming.LogServer.SendFileAsync(_socket, file); }
+                catch (Exception ex) { Log("HTTP file: " + ex.Message); }
+                _closeWhenDrained = true;
+                _signal.Release();
+                return;
+            }
             byte[] reply = _server.Http != null
                 ? await _server.Http.HandleAsync(request)
                 : W10MDashcam.Streaming.HttpApi.Reply(404, "Not Found", "text/plain", "");

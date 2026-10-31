@@ -29,7 +29,7 @@ namespace W10MDashcam
         private bool _wantLive = true;
 
         private static readonly int[] SegmentMinutesOptions = { 1, 3, 5, 10 };
-        private static readonly int[] LimitGbOptions = { 4, 8, 16, 32, 64, 0 }; // 0 = all free space (keeping 1 GB)
+        private static readonly int[] LimitGbOptions = { -1, 4, 8, 16, 32, 64, 0 }; // -1 = automatic, 0 = all free space (keeping the reserve)
         private static readonly string[] LocationModes = { "auto", "phone", "sd", "custom" };
 
         private sealed class ChoiceOption
@@ -41,7 +41,7 @@ namespace W10MDashcam
 
         private bool CameraWanted => _wantLive || _recorder.Enabled;
         private bool RecordOnOpen => !(_settings.Values["RecAutoStart"] is bool r) || r;
-        private bool LiveOnOpen => !(_settings.Values["AutoStart"] is bool a) || a;
+        private bool LiveOnOpen => _settings.Values["AutoStart"] is bool a && a; // off by default: the app is a dashcam first
 
         /// <summary>Constructor part: saved settings into the recorder and the controls.</summary>
         private void LoadRecordingSettings()
@@ -49,13 +49,14 @@ namespace W10MDashcam
             _recorder.Log = Log;
             _recorder.Enabled = false; // switched on by the start-up logic (Record when the app opens) or the button
             int seg = _settings.Values["RecSegmentMin"] is int sm ? sm : 3;
-            int gb = _settings.Values["RecLimitGB"] is int lg ? lg : 16;
+            int gb = _settings.Values["RecLimitGB"] is int lg ? lg : -1; // new installs: automatic
             SetRecorderLimits(seg, gb);
             string mode = _settings.Values["RecLocation"] as string;
             _recorder.StorageMode = Array.IndexOf(LocationModes, mode) >= 0 ? mode : "auto";
 
             foreach (var m in SegmentMinutesOptions) SegmentBox.Items.Add(new ChoiceOption { Value = m, Text = m + " min" });
-            foreach (var g in LimitGbOptions) LimitBox.Items.Add(new ChoiceOption { Value = g, Text = g == 0 ? "All free space (keep 1 GB)" : g + " GB" });
+            foreach (var g in LimitGbOptions)
+                LimitBox.Items.Add(new ChoiceOption { Value = g, Text = g < 0 ? "Automatic (fits the storage)" : g == 0 ? "All free space (keep a reserve)" : g + " GB" });
             RebuildLocationBox();
             RecordOnOpenToggle.IsOn = RecordOnOpen;
             SelectChoice(SegmentBox, seg);
@@ -64,12 +65,15 @@ namespace W10MDashcam
             HookCameraButton();
             _recorder.ClipResult += (ok, text) => { var _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => OnClipResult(ok, text)); };
             LoadSafetySettings();
+            LoadPowerLossSettings();
+            LoadServerSettings();
         }
 
         private void SetRecorderLimits(int segmentMin, int limitGb)
         {
             _recorder.SegmentSeconds = Math.Max(1, Math.Min(30, segmentMin)) * 60;
-            _recorder.LimitBytes = limitGb <= 0 ? long.MaxValue : (long)limitGb << 30;
+            _recorder.AutoLoop = limitGb < 0; // automatic: the recorder works the limit out from the storage
+            if (limitGb >= 0) _recorder.LimitBytes = limitGb == 0 ? long.MaxValue : (long)limitGb << 30;
         }
 
         private static void SelectChoice(ComboBox box, int value)
@@ -79,7 +83,7 @@ namespace W10MDashcam
         }
 
         private int SegmentMinutes => _recorder.SegmentSeconds / 60;
-        private int LimitGb => _recorder.LimitBytes == long.MaxValue ? 0 : (int)(_recorder.LimitBytes >> 30);
+        private int LimitGb => _recorder.AutoLoop ? -1 : _recorder.LimitBytes == long.MaxValue ? 0 : (int)(_recorder.LimitBytes >> 30);
 
         /// <summary>The camera's encoded output goes to the recorder as well as to the RTSP server.</summary>
         private void WireRecorder(Streaming.CameraEngine cam)
@@ -112,6 +116,7 @@ namespace W10MDashcam
 
         private void SetRecording(bool on)
         {
+            if (on && _recorder.Halted) { _recorder.Resume(); return; } // recording had stopped by itself: Start means try again
             if (_recorder.Enabled == on) return;
             _recorder.Enabled = on;
             if (!on) _recorder.EndSegment();
@@ -291,7 +296,7 @@ namespace W10MDashcam
             _settings.Values["RecSegmentMin"] = SegmentMinutes;
             _settings.Values["RecLimitGB"] = LimitGb;
             _recorder.Housekeep();
-            Log("Recording: " + SegmentMinutes + " min files, keep " + (LimitGb == 0 ? "all free space (1 GB spare)" : "up to " + LimitGb + " GB"));
+            Log("Recording: " + SegmentMinutes + " min files, keep " + (LimitGb < 0 ? "what the storage allows (automatic)" : LimitGb == 0 ? "all free space (a reserve kept)" : "up to " + LimitGb + " GB"));
         }
 
         // ---------------------------------------------------------------- where recordings go
@@ -351,28 +356,225 @@ namespace W10MDashcam
         {
             var r = _recorder;
             bool rec = r.State == "recording";
-            RecDot.Fill = new Windows.UI.Xaml.Media.SolidColorBrush(rec ? Windows.UI.Color.FromArgb(255, 0xFF, 0x30, 0x30)
-                : r.State == "error" ? Windows.UI.Color.FromArgb(255, 0xFF, 0xA0, 0x20) : Windows.UI.Color.FromArgb(255, 0x55, 0x55, 0x55));
+            UpdateIncidentUi();
+            CheckPowerLoss();
+            SampleStats();
+            RecDot.Fill = rec || r.Halted ? Brush(0xFF, 0x30, 0x30) : r.State == "error" ? Brush(0xFF, 0xA0, 0x20) : Brush(0x55, 0x55, 0x55);
             RecStateText.Text = rec ? "REC " + TimeSpan.FromSeconds(Math.Floor(r.CurrentSeconds)).ToString(@"m\:ss")
+                : r.Halted ? "RECORDING STOPPED"
                 : !r.Enabled ? "NOT RECORDING" : r.State.ToUpperInvariant();
             RecInfoText.Text = DateTime.Now < _clipShowUntil ? _clipText : RecordingSummary();
             UpdateSaveButton(rec);
             LocationText.Text = string.IsNullOrEmpty(r.Location) ? "Decided when recording starts" : "Now: " + r.Location;
+            if (StoragePanel.Visibility == Visibility.Visible) StorageText.Text = DateTime.Now < _storageNoteUntil ? _storageNote : StorageDetail();
             UpdateRunButtons();
             UpdateSafetyUi();
         }
 
+        private bool _incidentShown;
+
+        /// <summary>
+        /// Recording stopped by itself (a storage problem only the user can fix): a red banner with the reason and a
+        /// Resume button, a buzz and a tone once, and the black screen is lifted and kept off until it is resumed.
+        /// </summary>
+        private void UpdateIncidentUi()
+        {
+            bool halted = _recorder.Halted;
+            IncidentBorder.Visibility = halted ? Visibility.Visible : Visibility.Collapsed;
+            if (halted)
+            {
+                IncidentText.Text = "RECORDING IS NOT WORKING\n" + _recorder.Incident;
+                if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible)
+                {
+                    _wakeTimer.Stop();
+                    BlackoutOverlay.Visibility = Visibility.Collapsed;
+                    if (_brightness != null && _brightness.IsSupported) _brightness.StopOverride();
+                }
+                if (!_incidentShown)
+                {
+                    _incidentShown = true;
+                    PlayChime(false);
+                    var buzz = BuzzAsync(3);
+                    var match = MatchCameraAsync(); // the camera stops too, unless live view is on
+                }
+            }
+            else if (_incidentShown)
+            {
+                _incidentShown = false;
+                if (_blackedOut) { _wakeTimer.Stop(); _wakeTimer.Start(); } // black out again after the usual delay
+            }
+        }
+
+        private async void IncidentResumeButton_Click(object sender, RoutedEventArgs e)
+        {
+            SetRecording(true);
+            await MatchCameraAsync();
+        }
+
+        /// <summary>Minutes of footage the loop space holds at the current quality (-1 until known).</summary>
+        private double FootageMinutes()
+        {
+            var r = _recorder;
+            double rate = r.EstimatedBytesPerSecond;
+            if (rate <= 0) return -1;
+            long space = r.LimitBytes;
+            if (space == long.MaxValue) // "all free space": what the loop has plus the free space beyond the reserve
+                space = r.FreeBytes >= 0 ? r.LoopBytes + Math.Max(0, r.FreeBytes - r.MinFreeBytes) : -1;
+            return space < 0 ? -1 : space / rate / 60.0;
+        }
+
+        /// <summary>"25 min" / "3.2 h" (empty until known).</summary>
+        private string FootageShort()
+        {
+            double m = FootageMinutes();
+            if (m < 0) return "";
+            return m >= 120 ? Math.Round(m / 60.0, 1).ToString("0.#", CultureInfo.InvariantCulture) + " h"
+                            : Math.Round(m).ToString("0", CultureInfo.InvariantCulture) + " min";
+        }
+
+        private static string Gb(long bytes) => (bytes / 1073741824.0).ToString("0.0", CultureInfo.InvariantCulture) + " GB";
+
+        /// <summary>Where the recordings are, in a word or two: "Phone storage", "SD card", "Chosen folder".</summary>
+        private string PlaceShort()
+        {
+            string l = _recorder.Location ?? "";
+            int cut = l.IndexOf(" (", StringComparison.Ordinal);
+            if (cut > 0) l = l.Substring(0, cut);
+            return l.Length > 0 ? char.ToUpperInvariant(l[0]) + l.Substring(1) : l;
+        }
+
+        /// <summary>The one line under Save clip: the place, free space and how much footage the loop keeps.</summary>
         private string RecordingSummary()
         {
             var r = _recorder;
+            if (r.Halted) return r.Incident;
+            if (_powerStopped) return "Stopped: no power. Recording starts again when the power returns.";
             if (!string.IsNullOrEmpty(r.LastError) && r.State == "error") return r.LastError;
             if (!string.IsNullOrEmpty(r.Warning)) return "WARNING: " + r.Warning;
             if (string.IsNullOrEmpty(r.Location)) return r.Enabled ? "Starts with the camera" : "Recording is stopped";
-            string s = string.Format(CultureInfo.InvariantCulture, "Saved clips: {0}  -  loop: {1} older file{2} ({3:0.0} GB)",
-                r.SavedClips, r.LoopCount, r.LoopCount == 1 ? "" : "s", r.LoopBytes / 1073741824.0);
-            if (r.FreeBytes >= 0) s += string.Format(CultureInfo.InvariantCulture, "  -  {0:0.0} GB free", r.FreeBytes / 1073741824.0);
-            if (r.DroppedFrames > 0) s += " - " + r.DroppedFrames + " frames dropped (storage too slow)";
+            string s = PlaceShort();
+            if (r.FreeBytes >= 0) s += " · " + Gb(r.FreeBytes) + " free";
+            string f = FootageShort();
+            if (f.Length > 0) s += " · keeps ~" + f;
+            if (r.DroppedFrames > 0) s += " · " + r.DroppedFrames + " frames dropped";
             return s;
+        }
+
+        /// <summary>The details at the top of STORAGE.</summary>
+        private string StorageDetail()
+        {
+            var r = _recorder;
+            if (string.IsNullOrEmpty(r.Location)) return "The place is decided when recording starts.";
+            string s = string.Format(CultureInfo.InvariantCulture, "Loop: {0} file{1}, {2} of {3}{4}\nSaved clips: {5}, {6} of {7}{8}",
+                r.LoopCount, r.LoopCount == 1 ? "" : "s", Gb(r.LoopBytes),
+                r.LimitBytes == long.MaxValue ? "all free space" : Gb(r.LimitBytes), r.AutoLoop ? " (auto)" : "",
+                r.SavedClips, Gb(r.SavedBytes), r.SavedLimitBytes == long.MaxValue ? "no limit" : Gb(r.SavedLimitBytes), r.AutoSaved ? " (auto)" : "");
+            if (r.FreeBytes >= 0) s += "\n" + Gb(r.FreeBytes) + " free, " + Gb(r.MinFreeBytes) + " always kept free";
+            double m = FootageMinutes();
+            if (m >= 0) s += "\nThe loop keeps about " + FootageShort() + " of footage at this quality" + (m < 30 ? " - very little" : "");
+            return s;
+        }
+
+        /// <summary>The SPEED and STORAGE tiles of the status card (from UpdateTiles, once a second).</summary>
+        private void UpdateDashTiles()
+        {
+            var f = _gps.Running ? _gps.Latest : null;
+            if (!_gpsOn) { SpeedValText.Text = "GPS off"; SetBar(SpeedBar, SpeedBarFill, 0, OffFill); }
+            else if (f.HasValue && f.Value.SpeedMs.HasValue)
+            {
+                double ms = f.Value.SpeedMs.Value;
+                SpeedValText.Text = SpeedText(ms);
+                SetBar(SpeedBar, SpeedBarFill, 100 * ms / 36.0, GreenFill); // full bar: 130 km/h (80 mph)
+            }
+            else { SpeedValText.Text = "N/A"; SetBar(SpeedBar, SpeedBarFill, 0, AmberFill); } // no fix (yet), or no speed in it
+
+            var r = _recorder;
+            long usable = r.FreeBytes >= 0 ? r.FreeBytes + r.LoopBytes + r.SavedBytes : -1;
+            double m = FootageMinutes();
+            StoreText.Text = r.Halted ? "STOPPED" : m >= 0 ? "~" + FootageShort() : r.FreeBytes >= 0 ? Gb(r.FreeBytes) : "n/a";
+            SetBar(StoreBar, StoreBarFill, usable > 0 ? 100.0 * (r.LoopBytes + r.SavedBytes) / usable : 0,
+                r.Halted ? RedFill : (m >= 0 && m < 30) || !string.IsNullOrEmpty(r.Warning) ? AmberFill : GreenFill);
+
+            // The notice under the default-login one: recording to the phone's own storage (small, shared with the system)
+            string note = InternalStorageNotice();
+            StorageNotice.Visibility = note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (note.Length > 0) StorageNoticeText.Text = note;
+            string charger = ChargerNotice();
+            ChargerNoticeBorder.Visibility = charger.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (charger.Length > 0) ChargerNoticeText.Text = charger;
+        }
+
+        /// <summary>Text of the "recording to internal storage" notice (empty when recording elsewhere).</summary>
+        private string InternalStorageNotice()
+        {
+            var r = _recorder;
+            if (r.OnSd || !(r.Location ?? "").StartsWith("phone storage", StringComparison.Ordinal)) return "";
+            string f = FootageShort();
+            return "Recording to the phone's internal storage" + (r.FreeBytes >= 0 ? " (" + Gb(r.FreeBytes) + " free" + (f.Length > 0 ? ", keeps ~" + f : "") + ")" : "")
+                + ". An SD card is highly recommended: constant recording wears out the phone's internal storage.";
+        }
+
+        // ---------------------------------------------------------------- delete all / format the SD card
+
+        private string _storageNote = "";
+        private DateTime _storageNoteUntil = DateTime.MinValue;
+
+        private void ShowStorageNote(string text)
+        {
+            _storageNote = text;
+            _storageNoteUntil = DateTime.Now.AddSeconds(8);
+            StorageText.Text = text;
+        }
+
+        private async void DeleteAllButton_Click(object sender, RoutedEventArgs e)
+        {
+            var alsoSaved = new ToggleSwitch { Header = "Also delete the saved clips", Margin = new Thickness(0, 8, 0, 0) };
+            var body = new StackPanel();
+            body.Children.Add(new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = "Deletes every loop recording in " + (string.IsNullOrEmpty(_recorder.Location) ? "the recordings folder" : PlaceShort().ToLowerInvariant())
+                    + ". Recording carries on in a new file. This cannot be undone."
+            });
+            body.Children.Add(alsoSaved);
+            var dlg = new ContentDialog { Title = "Delete all recordings?", Content = body, PrimaryButtonText = "Delete", SecondaryButtonText = "Cancel" };
+            try { if (await dlg.ShowAsync() != ContentDialogResult.Primary) return; }
+            catch (Exception ex) { Log("Delete all: " + ex.Message); return; } // another dialog is open
+            DeleteAllButton.IsEnabled = false;
+            ShowStorageNote("Deleting...");
+            string result = await _recorder.DeleteAllAsync(alsoSaved.IsOn);
+            DeleteAllButton.IsEnabled = true;
+            ShowStorageNote(result);
+        }
+
+        /// <summary>
+        /// Apps cannot format a card, so: record to the phone's storage, then open the phone's Storage settings
+        /// (SD card > Format). Coming back to the app uses the card again (ReturnToSd on resume / visible).
+        /// </summary>
+        private async void FormatSdButton_Click(object sender, RoutedEventArgs e)
+        {
+            bool card = false;
+            try { card = (await Windows.Storage.KnownFolders.RemovableDevices.GetFoldersAsync()).Count > 0; } catch { }
+            if (!card) { ShowStorageNote("No SD card found."); return; }
+            var dlg = new ContentDialog
+            {
+                Title = "Format the SD card?",
+                Content = new TextBlock
+                {
+                    TextWrapping = TextWrapping.Wrap,
+                    Text = "Formatting erases everything on the card, recordings included. Apps can't format a card, so recording moves to "
+                         + "the phone's storage and the phone's Storage settings open: tap the SD card, then Format. Come back to this app afterwards and it uses the card again."
+                },
+                PrimaryButtonText = "Open Storage settings",
+                SecondaryButtonText = "Cancel"
+            };
+            try { if (await dlg.ShowAsync() != ContentDialogResult.Primary) return; }
+            catch (Exception ex) { Log("Format SD: " + ex.Message); return; }
+            _recorder.ReleaseSd();
+            await Task.Delay(1500); // the file on the card is finished first
+            bool opened = false;
+            try { opened = await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:storagesense")); } catch { }
+            if (!opened) ShowStorageNote("Could not open the settings: open Settings > System > Storage on the phone. Recording stays on the phone's storage until the app is opened again.");
         }
 
         // ---------------------------------------------------------------- web / USB config
@@ -384,6 +586,8 @@ namespace W10MDashcam
         private async Task ApplyRecordingConfigAsync(IDictionary<string, string> form, List<string> done)
         {
             await ApplySafetyConfigAsync(form, done);
+            await ApplyPowerLossConfigAsync(form, done);
+            await ApplyServerConfigAsync(form, done);
             bool uiChange = false, matchCamera = false;
             if (form.TryGetValue("record", out var rec))
             {
@@ -414,13 +618,14 @@ namespace W10MDashcam
             if (form.TryGetValue("segment", out var sg) && int.TryParse(sg, out int sgv) && sgv >= 1 && sgv <= 30) { seg = sgv; limits = true; }
             if (form.TryGetValue("storage", out var st))
             {
-                if (st.Equals("all", StringComparison.OrdinalIgnoreCase) || st == "0") { gb = 0; limits = true; }
+                if (st.Equals("auto", StringComparison.OrdinalIgnoreCase)) { gb = -1; limits = true; }
+                else if (st.Equals("all", StringComparison.OrdinalIgnoreCase) || st == "0") { gb = 0; limits = true; }
                 else if (int.TryParse(st, out int gbv) && gbv >= 1 && gbv <= 1024) { gb = gbv; limits = true; }
             }
             if (limits)
             {
                 ApplyRecLimits(seg, gb);
-                done.Add("recording files " + SegmentMinutes + " min, storage " + (LimitGb == 0 ? "all" : LimitGb + " GB"));
+                done.Add("recording files " + SegmentMinutes + " min, storage " + (LimitGb < 0 ? "automatic" : LimitGb == 0 ? "all" : LimitGb + " GB"));
                 uiChange = true;
             }
             if (form.TryGetValue("location", out var loc))
@@ -429,6 +634,18 @@ namespace W10MDashcam
                 if (Array.IndexOf(LocationModes, loc) < 0) done.Add("location: use auto, phone, sd or custom");
                 else if (loc == "custom" && !HasCustomFolder) done.Add("location: choose a folder on the phone first (Recording > Choose folder)");
                 else { SetLocation(loc); done.Add("recordings go to " + loc); uiChange = true; }
+            }
+            if (form.TryGetValue("resume", out var rsm) && IsOn(rsm))
+            {
+                SetRecording(true); // after "recording stopped" (storage problem): try again
+                done.Add("recording resumed");
+                matchCamera = true;
+            }
+            if (form.TryGetValue("testincident", out var ti) && IsOn(ti)) // shows the "recording stopped" warning on purpose
+            {
+                _recorder.TestIncident();
+                done.Add("test: the recording-stopped warning is shown (resume=1, or Resume on the phone, clears it)");
+                matchCamera = true;
             }
             if (form.TryGetValue("saveclip", out var sc) && IsOn(sc))
             {
@@ -455,16 +672,20 @@ namespace W10MDashcam
             "live=" + (_wantLive ? "on" : "off") + ", liveonopen=" + (LiveOnOpen ? "on" : "off") + "\n" +
             "location=" + _recorder.StorageMode + " (now: " + _recorder.Location + ")\n" +
             "segment=" + SegmentMinutes + " (minutes per file)\n" +
-            "storage=" + (LimitGb == 0 ? "all" : LimitGb.ToString()) + " (GB the loop recordings may use; all = all free space but 1 GB)\n" +
+            "storage=" + (LimitGb < 0 ? "auto" : LimitGb == 0 ? "all" : LimitGb.ToString()) + " (GB the loop recordings may use; auto = what the storage allows; all = all free space but a reserve)\n" +
+            (_recorder.Halted ? "STOPPED: " + _recorder.Incident + " (resume=1 to try again)\n" : "") +
+            PowerLossConfigText() +
+            ServerConfigText() +
             SafetyConfigText();
 
-        private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=GB|all, saveclip=1, impact=off|low|medium|high, keepnext=on|off, savedlimit=GB|none, replacesaved=on|off, gps=on|off, units=auto|kmh|mph, subtitles=on|off";
+        private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=auto|GB|all, saveclip=1, resume=1, powerloss=SECONDS|off, log=on|off, impact=off|low|medium|high, keepnext=on|off, savedlimit=auto|GB|none, replacesaved=on|off, gps=on|off, units=auto|kmh|mph, subtitles=on|off";
 
         private void AddRecordingJson(JsonObject o)
         {
             var r = _recorder;
             o["live"] = JsonValue.CreateBooleanValue(_wantLive);
             o["liveOnOpen"] = JsonValue.CreateBooleanValue(LiveOnOpen);
+            AddServerJson(o);
             var j = new JsonObject();
             j["enabled"] = JsonValue.CreateBooleanValue(r.Enabled);
             j["onOpen"] = JsonValue.CreateBooleanValue(RecordOnOpen);
@@ -484,6 +705,16 @@ namespace W10MDashcam
             j["writeMBps"] = JsonValue.CreateNumberValue(Math.Round(r.WriteMBps, 2));
             j["maxWriteMs"] = JsonValue.CreateNumberValue(r.MaxWriteMs);
             j["error"] = JsonValue.CreateStringValue(r.LastError);
+            j["halted"] = JsonValue.CreateBooleanValue(r.Halted);
+            j["incident"] = JsonValue.CreateStringValue(r.Incident ?? "");
+            j["loopLimitGB"] = r.LimitBytes == long.MaxValue ? JsonValue.CreateNullValue() : JsonValue.CreateNumberValue(Math.Round(r.LimitBytes / 1073741824.0, 1));
+            j["savedLimitNowGB"] = r.SavedLimitBytes == long.MaxValue ? JsonValue.CreateNullValue() : JsonValue.CreateNumberValue(Math.Round(r.SavedLimitBytes / 1073741824.0, 1));
+            j["reserveMB"] = JsonValue.CreateNumberValue(Math.Round(r.MinFreeBytes / 1048576.0));
+            j["savedUsedMB"] = JsonValue.CreateNumberValue(Math.Round(r.SavedBytes / 1048576.0));
+            double fm = FootageMinutes();
+            j["footageMin"] = fm >= 0 ? JsonValue.CreateNumberValue(Math.Round(fm)) : JsonValue.CreateNullValue();
+            j["place"] = JsonValue.CreateStringValue(PlaceShort());
+            AddPowerLossJson(j);
             AddSafetyJson(j);
             o["recording"] = j;
         }

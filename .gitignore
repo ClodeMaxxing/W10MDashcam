@@ -36,3 +36,6 @@ release/
 tools/portal-monitor.csv
 tools/dump/
 tools/soak/
+
+# GitHub wiki sources (pushed to the separate wiki repository)
+wiki/

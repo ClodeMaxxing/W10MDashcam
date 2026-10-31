@@ -51,17 +51,32 @@ namespace W10MDashcam.Streaming
         public Func<string> GetCameraJson = () => "{}";
         public DigestAuth Auth;
         public SegmentRecorder Recorder;
+        /// <summary>The web page is switched on (phone: Network and login). Off: every HTTP request gets "switched off".</summary>
+        public volatile bool WebEnabled = true;
+        /// <summary>The log and stats pages are switched on.</summary>
+        public volatile bool LogEnabled = true;
+        /// <summary>The stats samples as JavaScript string literals, for the stats page.</summary>
+        public Func<string> GetStatsRows = () => "";
+
+        private static byte[] WebOff() => Reply(503, "Service Unavailable", "text/plain", "The web page is switched off on the phone (Network and login).\n");
+        private static byte[] LogOff() => Reply(404, "Not Found", "text/plain", "The log and stats pages are switched off (Network and login on the phone, or Network and login on the web page).\n");
 
         public async Task<byte[]> HandleAsync(HttpRequest r)
         {
             try
             {
+                if (!WebEnabled) return WebOff();
                 string path = r.Path.TrimEnd('/');
                 // Everything needs the login except requests over the USB cable (only the PC it is plugged into can make those).
                 if (Auth != null && Auth.Enabled && !r.FromUsb && !Auth.Check(r.Method, Header(r, "Authorization"), out bool gateStale))
                     return Reply(401, "Unauthorized", "text/plain", "Login required\n", Auth.Challenge(gateStale));
                 if (path == "" || path == "/log")
-                    return Reply(200, "OK", "text/plain; charset=utf-8", GetLog());
+                    return LogEnabled ? Reply(200, "OK", "text/plain; charset=utf-8", GetLog()) : LogOff();
+
+                if (path == "/stats")
+                    return LogEnabled
+                        ? Reply(200, "OK", "text/html; charset=utf-8", StatsPage.Html.Replace("/*ROWS*/", GetStatsRows()), "Cache-Control: no-store\r\n")
+                        : LogOff();
 
                 if (path == "/status")
                     return Reply(200, "OK", "application/json", GetStatusJson());
@@ -81,7 +96,8 @@ namespace W10MDashcam.Streaming
                 if (path == "/recordings/srt")
                     return await HandleCaptionsAsync(r);
 
-                if (path == "/recordings" || path == "/recordings/save" || path == "/recordings/delete" || path == "/recordings/lock" || path == "/recordings/unlock")
+                if (path == "/recordings" || path == "/recordings/save" || path == "/recordings/delete" || path == "/recordings/deleteall"
+                    || path == "/recordings/lock" || path == "/recordings/unlock")
                     return await HandleRecordingsAsync(r, path);
 
                 if (path == "/config")
@@ -130,7 +146,7 @@ namespace W10MDashcam.Streaming
                     return Reply(403, "Forbidden", "text/plain", "Use the settings page (missing X-Requested-With header)\n");
                 var all = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved", "gps", "units", "subtitles" })
+                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip", "resume", "testincident", "powerloss", "testpowerloss", "log", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved", "gps", "units", "subtitles" })
                     if (all.TryGetValue(k, out var v)) only[k] = v;
                 string bad = CheckLoginFields(only);
                 if (bad != null) result = bad;
@@ -180,6 +196,13 @@ namespace W10MDashcam.Streaming
             string fname = form.TryGetValue("name", out var fn) ? fn : "";
             if (path == "/recordings/lock") { Recorder.Lock(fname); return Reply(200, "OK", "text/plain", "Keeping " + fname + "\n"); }
             if (path == "/recordings/unlock") { Recorder.Unlock(fname); return Reply(200, "OK", "text/plain", "Unlocking " + fname + "\n"); }
+            if (path == "/recordings/deleteall")
+            {
+                // the page asks the user to type DELETE; the check here keeps a stray request from wiping everything
+                if (!form.TryGetValue("confirm", out var cf) || cf != "DELETE") return Reply(400, "Bad Request", "text/plain", "confirm=DELETE is needed\n");
+                string wiped = await Recorder.DeleteAllAsync(form.TryGetValue("saved", out var withSaved) && withSaved == "1");
+                return Reply(200, "OK", "text/plain", wiped + "\n");
+            }
             string err = await Recorder.DeleteAsync(form.TryGetValue("name", out var n) ? n : "", form.TryGetValue("saved", out var sv) && sv == "1");
             return err == null ? Reply(200, "OK", "text/plain", "Deleted\n") : Reply(400, "Bad Request", "text/plain", err + "\n");
         }
@@ -214,6 +237,7 @@ namespace W10MDashcam.Streaming
             if (Recorder == null || r.Path.TrimEnd('/') != "/recordings/file") return null;
             try
             {
+                if (!WebEnabled) return new FileReply { Error = WebOff() };
                 if (Auth != null && Auth.Enabled && !r.FromUsb && !Auth.Check(r.Method, Header(r, "Authorization"), out bool stale))
                     return new FileReply { Error = Reply(401, "Unauthorized", "text/plain", "Login required\n", Auth.Challenge(stale)) };
                 var q = ParseForm(r.Query);

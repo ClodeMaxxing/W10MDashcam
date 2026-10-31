@@ -1,9 +1,81 @@
 # Changelog
 
+## W10MDashcam 0.7.6 (first release)
+
+A dashcam app forked from W10MSecurityCam 1.1 (build 1.9.29).
+
+**Recording**
+- Records the camera's encoded stream (no second encode) to fragmented MP4 files: H.264, optional AAC sound, and a
+  subtitle track. 4K30 at 24 Mbps by default. A new file every 1, 3, 5 or 10 minutes, cut at keyframes with no gap.
+- Loop recording deletes the oldest of the app's own files only; other files in the same folder are never touched.
+- Save clip (phone button, web page, or the phone's camera button) keeps the current file, the one before it and, by
+  default, the next one, with a chime and a buzz. Keep / Unlock per recording on the web page. Clips still in use by
+  Windows (indexer, downloads) are moved to Saved as soon as they are free, also after a restart.
+- Crash detection (G-sensor, low 2.5 g / medium 1.6 g / high 1 g) saves the clip and the next file; screen taps don't count.
+- GPS speed, position and heading, the date and time and IMPACT markers in a subtitle track in every recording;
+  .srt download per recording on the web page.
+- Record when the app opens (remembered); recording and live view start and stop separately.
+- Stop when the power is lost: when the charger goes, a 60-second countdown shows on the screen (Keep recording skips
+  it); then recording and live view stop, and they start again when the power returns. The delay (30 s to 5 min) or
+  Never is set under Recording options or with `powerloss=`.
+
+**Storage**
+- Save to: Automatic (SD card, or the phone's storage when the card is missing or full), phone storage, SD card, or a
+  chosen folder.
+- Automatic space: loop space, saved-clip space and a reserve worked out from the storage, so small and large cards
+  work without settings. Footage estimate ("keeps ~22 min") on the status card and in the Storage section.
+- Recording stops by itself with a red on-screen warning, a buzz and a tone (the black screen lifts) when the storage
+  cannot keep up (90+ dropped frames in a minute), is full with nothing to delete, or keeps failing. Resume recording
+  on the phone or the web page.
+- Delete all (loop recordings, optionally saved clips); Format SD moves recording to the phone's storage and opens the
+  phone's Storage settings.
+- Amber notice while recording to the phone's internal storage.
+- Network and login shows the web page address (`http://PHONE-IP:5001/camera`) above the live-view addresses.
+- Heat warnings: one full message at the top (including the usual cause: a charger that can't keep up, such as a PC
+  USB port, drains and heats the battery); the sections only show a short "Heat protection" label.
+- Recordings play and download over the USB cable too (`http://127.0.0.1:8020`); before, only the page and the list worked there.
+- A dashcam first: a fresh install only records. The web page, the log and stats pages and the live view are off until
+  switched on (Network and login); an update keeps an existing install's pages on.
+- Switches for the web page (phone only) and for the log and stats pages (phone and web page).
+- Stats page (`/stats`): graphs of the last 12 hours sampled every 30 s by the app itself (frame rate, bitrate, write
+  speed, dropped frames, free storage, speed, battery, power, CPU, memory, Wi-Fi, states), the same page as the PC's
+  soak report.
+- "Charger insufficient" notice when the phone reports charging but the battery still drains.
+- *Show camera picture (60 s)* sits right under Start recording / Start streaming.
+- The internal-storage notice recommends an SD card to spare the phone's storage from constant writing.
+
+**Screens**
+- Phone and web page: Recording, Recording options and Storage sections; explanations behind (i) pop-ups; toggle
+  switches instead of checkboxes on the phone.
+- Status card: SPEED and STORAGE tiles replace engine and latency; latency shows in the viewers pill while someone
+  watches; SAFE on the resolution pill in safe mode.
+- Web page: recordings list with play, download, captions, keep/unlock and delete; reloads itself after an app update.
+- New icon (a phone sideways in a car mount).
+
+**Under the hood**
+- The recordings list and the saved-clip totals come from memory instead of re-reading the folder (folder queries in
+  an indexed library folder cost frames).
+- Single deletes no longer re-scan the folder; colours are made once instead of every second.
+- New config fields: `record`, `live`, `recordonopen`, `liveonopen`, `location`, `segment`, `storage`, `savedlimit`,
+  `replacesaved`, `keepnext`, `impact`, `gps`, `units`, `subtitles`, `saveclip`, `resume`, `powerloss`, `testincident`,
+  `testpowerloss`.
+
+### Development builds
+| Build | Content |
+|---|---|
+| 0.1 | New identity (W10MDashcam) |
+| 0.2-0.3 | Fragmented MP4 recorder, loop recording, Save clip, storage choice, recordings page |
+| 0.4 | Camera button, record on open, Save clip feedback |
+| 0.5 | Crash detection, locking, GPS subtitles, captions download, storage-full handling, new icon |
+| 0.6 | Automatic space, SD fallback, recording-stopped warning; new sections, delete all, format SD |
+| 0.7 | Toggle switches, internal-storage notice, stop on power loss, release docs |
+
+## Inherited from W10MSecurityCam
+
 Release 1.0 is the first version considered complete for this fork. Build numbers 1.0-1.9 before it were the
 development steps; they are kept in the history table for reference.
 
-## Release 1.1 (build 1.9.29.0)
+### Release 1.1 (build 1.9.29.0)
 - **Crash fix:** the app could close about a second after the first 4K frame on a fresh launch (crash dump: fast-fail abort from an exception escaping the native sink's worker thread). The native sink and the frame handler now catch and log such errors ("handler threw an exception - ignored") instead of ending the app.
 - **Camera power saving:** one "Power-saving camera features" box (stabilization off for a fixed mount, hold focus once it has settled); untick it to choose each option. HDR and noise-reduction controls were removed because this camera does not offer them.
 - **Power monitor:** the status block shows net watts into or out of the battery (5-minute average, restarted whenever the charger is plugged in or out or charging pauses, so a reading never mixes two states), the phone's draw while it is on battery or charging is paused (from the capacity change; the driver's own rate is stale on this phone and is not used), the charger state Windows reports, and CPU use (phone and app). A "Power:" line is logged every minute for comparing settings. `probe=power` dumps the raw battery and CPU readings.
@@ -21,7 +93,7 @@ development steps; they are kept in the history table for reference.
 - `tools/Soak-Monitor.ps1` records every status value on the PC for long runs and keeps an HTML report with graphs and a summary (availability, restarts, heat time, fps, memory trend).
 - `tools/Monitor-Portal.ps1` logs whole-phone CPU, GPU and battery from Device Portal once a minute.
 
-## Release 1.0 (build 1.9.1.0)
+### Release 1.0 (build 1.9.1.0)
 - MIT licence added.
 - The login is always on, default admin / admin, for the stream and the web page. It can be changed on the settings page (Login section) or on the phone; an empty password resets it.
 - `/status`, the log and snapshots now need the login from the network too (USB is exempt).
@@ -32,7 +104,7 @@ development steps; they are kept in the history table for reference.
 - Phone screen and web page split into Status / Video / Camera / Power.
 - Web page shows the right bitrate and resolution right after a change.
 
-## Development history
+### Development history
 | Build | Content |
 |---|---|
 | 1.0 | Fork of LumiaCam, new identity |

@@ -72,6 +72,7 @@ button.tog.on{background:#18452b;color:#39ff14;border-color:#39ff14;box-shadow:0
 .state.rec{color:#ff8a8a}
 button.save{background:#5a1010;color:#ffe0e0;border-color:#a03030;font-weight:bold;width:100%}
 button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,48,48,.4)}
+button.danger{background:#3a1010;color:#ffd0d0;border-color:#a03030}button.danger:hover:not(:disabled){background:#5a1414;box-shadow:0 0 8px rgba(255,48,48,.35)}
 .files{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
 .files td{border-top:1px solid #16301e;padding:5px 3px;vertical-align:middle}
 .files td.n{font-family:Consolas,'Cascadia Mono',monospace;color:#e4f5e7;white-space:nowrap}
@@ -84,23 +85,31 @@ button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,
 <h1><span>W10MDashcam</span><span id='ver'></span></h1>
 <h2>Status</h2>
 <div class='row'><div id='stat'>loading...</div><div id='warn'></div></div>
-<h2>Recordings</h2>
+<h2>Recording</h2>
 <div class='row'><div class='card'>
 <div class='top'><span class='dot' id='rdot'></span><span class='state' id='rstate'>-</span><span class='pill r' id='rloc'></span></div>
 <button class='save' id='rsave' data-tip='Keeps the file being recorded and the one before it in the Saved folder, where loop recording never deletes them.'>SAVE CLIP</button>
 <div class='sub' id='rinfo' style='margin:6px 0 0'></div></div>
-<div class='btnrow' style='margin-top:8px'><button id='rbtn'>Stop recording</button><label><input type='checkbox' id='roo'> Record when the app opens</label></div>
-<div class='vrow' style='margin-top:8px'><select id='rseg'></select><select id='rlim'></select></div>
-<div class='vrow' style='margin-top:6px'><select id='rimp'></select><label><input type='checkbox' id='rkn'> Save clip also keeps the next file</label></div>
+<div class='btnrow' style='margin-top:8px'><button id='rbtn'>Stop recording</button><label><input type='checkbox' id='roo'> Record when the app opens</label></div></div>
+<h2>Recording options</h2>
+<div class='row'>
+<div class='vrow'><select id='rseg'></select><select id='rimp'></select><i class='tip' data-tip='Crash detection: on a jolt above the chosen level the current file, the one before and the next one are saved. Taps on the phone screen within 2 s do not count.'>i</i></div>
 <div class='sub' id='rg' style='margin:4px 0 0'></div>
-<div class='sub' id='rgps' style='margin:4px 0 0'></div>
+<div class='vrow' style='margin-top:6px'><select id='rpl'></select><i class='tip' data-tip='When the charger is disconnected (the car is switched off), a countdown shows on the phone. When it ends, recording and live view stop so the battery is not run flat; they start again when the power returns.'>i</i></div>
+<div class='vrow' style='margin-top:6px'><label><input type='checkbox' id='rkn'> Save clip also keeps the next file</label></div>
 <div class='vrow' style='margin-top:6px'><label><input type='checkbox' id='rgo'> GPS</label><select id='runits'></select><label><input type='checkbox' id='rsub'> Time, speed and position in recordings</label><i class='tip' data-tip='A subtitle track inside each recording: date and time, speed, position and IMPACT markers. VLC and most players show it over the video (Subtitle menu).'>i</i></div>
-<div class='vrow' style='margin-top:6px'><select id='rsl'></select><label><input type='checkbox' id='rrs'> Replace the oldest saved clips when full</label></div>
-<div class='vrow' style='margin-top:6px'><select id='rwhere'></select><i class='tip' data-tip='Where new recordings go. A folder of your own is chosen on the phone (Recording > Choose folder). The list below shows the current place only.'>i</i></div>
-<div class='btnrow' style='margin-top:6px'><button id='rref'>Refresh list</button><span class='sub' style='margin:0'>Tap a name to play it. Captions downloads the time, speed and position as an .srt file: keep it next to the video with the same name. Keep moves a recording to Saved (never deleted); Unlock gives it back to loop recording.</span></div>
+<div class='sub' id='rgps' style='margin:4px 0 0'></div></div>
+<h2>Storage</h2>
+<div class='row'>
+<div class='sub' id='rstor' style='margin:0 0 8px;white-space:pre-line'></div>
+<div class='vrow'><select id='rwhere'></select><i class='tip' data-tip='Where new recordings go. Automatic: the SD card when there is one, the phone storage when it is missing or full. A folder of your own is chosen on the phone (Storage > Choose folder). The list below shows the current place only.'>i</i></div>
+<div class='vrow' style='margin-top:6px'><select id='rlim'></select><select id='rsl'></select><i class='tip' data-tip='Loop recording deletes its oldest files to stay within its space. Saved clips are never deleted by it. Automatic: saved clips get about a fifth of the storage (1 to 8 GB), a small reserve stays free, and loop recording gets the rest.'>i</i></div>
+<div class='vrow' style='margin-top:6px'><label><input type='checkbox' id='rrs'> Replace the oldest saved clips when full</label></div>
+<div class='btnrow' style='margin-top:8px'><button id='rref'>Refresh</button><button id='rdel' class='danger'>Delete all...</button><label><input type='checkbox' id='rdels'> saved clips too</label><i class='tip' data-tip='Formatting the SD card is only possible on the phone (Storage > Format SD): apps cannot format a card, so the phone opens its own Storage settings for it.'>i</i></div>
+<div class='vrow' style='margin-top:8px'><span class='sub' style='margin:0'>Recordings here</span><i class='tip' data-tip='Tap a name to play it. Captions: the time, speed and position as an .srt file (keep it next to the video, with the same name). Keep moves a recording to Saved; Unlock gives it back to loop recording.'>i</i></div>
 <table class='files' id='rlist'></table></div>
 <h2>Video</h2>
-<div class='bad' id='ta3' style='display:none;font-weight:bold'>THERMAL RECOVERY MODE: video lowered to 1080p / 6 Mbps until charging resumes</div>
+<div class='bad' id='ta3' style='display:none;font-weight:bold'>Heat protection: 1080p / 6 Mbps</div>
 <div class='row'>
 <div class='vrow'><select id='fmt'></select><select id='br'></select>
 <button id='hb' class='tog' data-tip='High bandwidth mode unlocks bitrates above 24 Mbps. Needs 5 GHz Wi-Fi or a USB-C connection; on 2.4 GHz the stream drops frames.'>High BW</button></div>
@@ -118,17 +127,18 @@ button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,
 <input type='range' id='es' min='0' max='100' step='0.5'></div>
 <div class='row'><div class='head'><span id='wl'>White balance</span><label><input type='checkbox' id='wa'> Auto</label></div>
 <input type='range' id='ws' min='2000' max='8000' step='100'></div>
-<div class='bad' id='ta1' style='display:none;font-weight:bold'>THERMAL RECOVERY MODE: flashlight unavailable until charging resumes</div>
+<div class='bad' id='ta1' style='display:none;font-weight:bold'>Heat protection: flashlight locked</div>
 <div class='row'><div class='head'><span><span id='tl'>Flashlight</span><i class='tip' data-tip='Only while streaming. Switches off by itself after 30 seconds: the LED heats the phone quickly and this phone cannot dim it.'>i</i></span><label><input type='checkbox' id='tt'> On</label></div>
 <div class='sub' id='tinfo'></div></div>
 <h2>Power</h2>
-<div class='bad' id='ta2' style='display:none;font-weight:bold'>THERMAL RECOVERY MODE: unavailable until charging resumes - power saving is forced on</div>
+<div class='bad' id='ta2' style='display:none;font-weight:bold'>Heat protection: power saving forced on</div>
 <div class='row'><div class='btnrow'><button id='ps'>Black out the phone screen</button><i class='tip' id='pinfo' data-tip='x'>i</i></div></div>
 <div class='row'><label><input type='checkbox' id='sall'> Power-saving camera features</label><i class='tip' data-tip='Less processing and heat: stabilization off for a fixed mount, and focus held once it has settled. Untick to choose each one. Changing stabilization restarts the stream once.'>i</i>
 <div id='spanel' style='margin-left:18px'>
 <div><label><input type='checkbox' id='so'> <span id='sol'>Stabilization off (fixed mount)</span></label></div>
 <div><label><input type='checkbox' id='sf'> Hold focus once it has settled</label></div></div></div>
-<h2>Login</h2>
+<h2>Network and login</h2>
+<div class='row'><label><input type='checkbox' id='lgo'> Log and stats pages</label> <span id='lglinks'><a href='/log' target='_blank' style='color:#9cf0b0'>log</a> &middot; <a href='/stats' target='_blank' style='color:#9cf0b0'>stats</a></span><i class='tip' data-tip='The app log (/log) and graphs of the last 12 hours (/stats). The web page itself can only be switched off on the phone.'>i</i></div>
 <div class='row'><div class='sub' style='margin-bottom:6px'><span id='lmsg'>One login protects the stream and this page.</span><i class='tip' data-tip='Use the new login in your NVR / VLC: rtsp://USER:PASSWORD@phone-address:8554/live. The browser asks you to sign in again after a change.'>i</i></div>
 <input id='lu' placeholder='User name'> <input id='lp' type='password' placeholder='New password'> <input id='lp2' type='password' placeholder='Repeat password'>
 <button id='lb'>Change login</button></div>
@@ -183,28 +193,40 @@ function render(){
  if(!st.charging&&st.drawWatts!=null)pw=Math.abs(st.drawWatts);else if(nw!=null)pw=st.charging?nw:Math.abs(nw);
  var pv=pw==null?'measuring':(st.charging&&pw>=0?'+':'')+pw.toFixed(1)+' W';
  var pbar=pw==null?'':meter(100*Math.abs(pw)/15,st.charging?(pw<0?'low':pw<1?'mid':''):(pw>8?'low':'mid'));
+ var rc=st.recording||{},gg=rc.gps||{};
+ var spd=!gg.on?'GPS off':gg.speed!=null?gg.speed+' '+gg.unitText:'N/A';
+ var spp=gg.speed!=null?100*gg.speed/(gg.unitText=='mph'?80:130):0;
+ var sused=(rc.usedMB||0)+(rc.savedUsedMB||0),sall=rc.freeMB!=null?rc.freeMB+sused:0;
+ var sval=rc.halted?'STOPPED':rc.footageMin!=null?'~'+fmin(rc.footageMin):rc.freeMB!=null?mb(rc.freeMB*1048576)+' free':'n/a';
+ var swarn=rc.halted||(rc.footageMin!=null&&rc.footageMin<30)||!!rc.warning;
  $('stat').innerHTML=""<div class='card'><div class='top'><span class='""+dc+""'></span><span class='state'>""+esc(state)+'</span>'
-  +(res?""<span class='pill'>""+esc(res)+'</span>':'')
+  +(res?""<span class='pill'>""+esc(res)+(st.safeMode?' SAFE':'')+'</span>':'')
   +""<span class='pill'>up ""+esc(upt)+'</span>'
-  +""<span class='pill r'>""+esc(st.viewers+' viewer'+(st.viewers==1?'':'s'))+'</span></div>'
+  +""<span class='pill r'>""+esc(st.viewers+' viewer'+(st.viewers==1?'':'s')+(st.viewers>0&&lat!=null?' · '+lat+' ms':''))+'</span></div>'
   +(st.streaming?""<div class='big'>""+esc(Math.round(st.fps))+'<small>fps</small>'+esc(st.mbps.toFixed?st.mbps.toFixed(1):st.mbps)+'<small>Mbps</small></div>':'')
   +""<div class='grid'>""
   +tile('Battery',st.battery==null?'n/a':st.battery+'% '+st.batteryStatus.toLowerCase(),st.batteryFalling,batt)
   +tile('Wi-Fi',st.wifiBars==null?'n/a':wb+' of 4',st.wifiBars!=null&&wb<2,bars)
-  +tile('Temp','',false,badge(st.heat||'n/a',st.heatWarn?'bad':''),st.heatDetail||'Healthy while the phone charges normally. Unstable when Windows pauses charging on a good charger, which it does when the battery is hot.')
+  +tile('Temp','',false,badge(st.heat||'n/a',st.heatWarn?'bad':''),st.heatDetail||'Healthy while charging normally; Unstable when Windows pauses charging because the phone is hot.')
   +tile('CPU phone',cpuP+'%',false,meter(cpuP,cpuP>70?'mid':''),'Whole phone. The camera, encoder and Wi-Fi do most of their work outside the CPU.')
   +tile('CPU app',cpuA+'%',false,meter(cpuA,cpuA>50?'mid':''))
   +tile('Memory',st.memoryMB+' MB',mp>80,meter(mp,mp>80?'low':mp>60?'mid':''),'App memory, of '+ml+' MB allowed.')
-  +tile('Engine','',false,badge(st.safeMode?'Safe mode':(st.engine||'n/a'),st.safeMode?'mid':st.streaming?'':'mid'),st.safeMode?'Safe mode: the fallback MP4 engine, limited to 1080p.':'Fast: the low-latency engine, the encoder hands each frame straight to the stream.')
-  +tile('Latency',lat==null?'n/a':lat+' ms',lat!=null&&lat>250,meter(lat==null?0:lat/3,lat>250?'low':lat>150?'mid':''),'Sensor to encoded frame, measured inside the phone (10 s average). Network and player delay come on top.')
+  +tile('Speed',spd,false,meter(spp,gg.speed!=null?'':'mid'),'GPS speed, also written into the recordings. The viewers pill shows the stream latency while someone watches.')
+  +tile('Storage',sval,swarn,meter(sall>0?100*sused/sall:0,rc.halted?'low':swarn?'mid':''),'How much footage loop recording keeps at this quality. The bar: space the recordings use. Details under Storage.')
   +tile(pl,pv,st.batteryFalling,pbar,(st.powerText||'')+' Bar scale: 0-15 W.')
   +'</div></div>';
  var nh='';
  if(st.heatWarn)nh+=""<div class='notice bad'><span class='ni'>!</span><span>""+esc(st.heatDetail||'Temperature unstable.')+'</span></div>';
- if(st.defaultLogin)nh+=""<div class='notice'><span class='ni'>!</span><span>Default login <code>admin / admin</code> in use. Change it under Login.</span></div>"";
+ if(st.defaultLogin)nh+=""<div class='notice'><span class='ni'>!</span><span>Default login <code>admin / admin</code> in use. Change it under Network and login.</span></div>"";
+ if(rc.powerLossLeft!=null)nh+=""<div class='notice bad'><span class='ni'>!</span><span>Power lost: recording stops in ""+rc.powerLossLeft+' s unless the power comes back (Keep recording on the phone skips it).</span></div>';
+ if(rc.powerStopped)nh+=""<div class='notice bad'><span class='ni'>!</span><span>Stopped: no power. Recording and live view start again when the power returns.</span></div>"";
+ if(st.charging&&st.batteryStatus=='Charging'&&st.netWatts!=null&&st.netWatts<-0.3)nh+=""<div class='notice'><span class='ni'>!</span><span>Charger insufficient: the battery is draining while charging (""+st.netWatts.toFixed(1)+' W). Use a 2 A or better charger.</span></div>';
+ if(rc.place=='Phone storage')nh+=""<div class='notice'><span class='ni'>!</span><span>Recording to the phone's internal storage""
+  +(rc.freeMB!=null?' ('+mb(rc.freeMB*1048576)+' free'+(rc.footageMin!=null?', keeps ~'+fmin(rc.footageMin):'')+')':'')+'. An SD card is highly recommended: constant recording wears out the internal storage.</span></div>';
  $('warn').innerHTML=nh;
  if(!$('lu').value&&document.activeElement!==$('lu'))$('lu').value=st.user||'admin';
  $('lb').disabled=!st.canWrite;
+ $('lgo').checked=!!st.logOn;$('lgo').disabled=!st.canWrite;$('lglinks').style.display=st.logOn?'':'none';
  $('tt').checked=st.torchOn;
  $('tt').disabled=!st.canWrite||!st.torchSupported||(!st.streaming&&!st.torchOn);
  $('tinfo').textContent=!st.torchSupported?'This camera has no flashlight control.':!st.streaming&&!st.torchOn?'Start the stream to use the flashlight.':st.torchOn?'On - switches off in '+st.torchLeftSec+' s.':'';
@@ -214,7 +236,7 @@ function render(){
  $('sf').disabled=$('sall').disabled=!st.canWrite;
  $('ta1').style.display=$('ta2').style.display=$('ta3').style.display=st.protect?'block':'none';
  $('fmt').disabled=$('br').disabled=$('hb').disabled=!st.canWrite||st.protect;
- if(st.protect){$('sall').disabled=$('so').disabled=$('sf').disabled=$('ps').disabled=$('tt').disabled=true;$('tinfo').textContent='The phone overheated. The stream is lowered, power saving is forced on and the flashlight is locked until charging resumes.'}
+ if(st.protect){$('sall').disabled=$('so').disabled=$('sf').disabled=$('ps').disabled=$('tt').disabled=true;$('tinfo').textContent='Locked by heat protection.'}
  $('sol').textContent='Stabilization off (fixed mount)'+(st.oisSupported?'':' - not offered by this camera');
  $('pinfo').setAttribute('data-tip','Brightness to zero, black screen and preview off while streaming. Windows Battery Saver: '+st.batterySaver+' (an app cannot switch it on; use the phone Settings > Battery).');
  $('all').checked=st.focusAuto&&st.exposureAuto&&st.wbAuto;
@@ -241,7 +263,9 @@ function send(body){
  .catch(function(e){$('msg').textContent=e.message})
 }
 function load(){
- fetch('/camera/state').then(function(r){return r.json()}).then(function(j){st=j;render()}).catch(function(){});
+ fetch('/camera/state').then(function(r){return r.json()}).then(function(j){
+  if(st&&st.version&&j.version&&j.version!==st.version){location.reload();return} // the app was updated: get its page
+  st=j;render()}).catch(function(){});
 }
 function later(body){clearTimeout(t);t=setTimeout(function(){send(body)},400)}
 $('lb').onclick=function(){
@@ -286,7 +310,8 @@ $('ws').oninput=function(){touched=Date.now();labels();later('wb='+this.value)};
   h.setAttribute('role','button');
   function show(open){body.style.display=open?'':'none';ar.textContent=open?'\u25BE':'\u25B4';h.setAttribute('aria-expanded',open?'true':'false')}
   show(saved[name]!==false);
-  h.onclick=function(){var open=body.style.display==='none';show(open);saved[name]=open;try{localStorage.setItem('w10m-fold',JSON.stringify(saved))}catch(e){}}
+  h.onclick=function(){var open=body.style.display==='none';show(open);saved[name]=open;try{localStorage.setItem('w10m-fold',JSON.stringify(saved))}catch(e){}
+   if(open&&body.querySelector('#rlist'))recList()}
  })
 })();
 // Hover (or tap) anything with data-tip to see its note; the box stays inside the window.
@@ -303,21 +328,28 @@ $('ws').oninput=function(){touched=Date.now();labels();later('wb='+this.value)};
  window.addEventListener('scroll',hide,true);
 })();
 // ---- dashcam recordings
-function mb(b){return b>=1073741824?(b/1073741824).toFixed(1)+' GB':Math.max(1,Math.round(b/1048576))+' MB'}
+function mb(b){return b>=1073741824?(b/1073741824).toFixed(1)+' GB':b>0?Math.max(1,Math.round(b/1048576))+' MB':'0 MB'}
 function hms(s){s=Math.floor(s||0);var m=Math.floor(s/60);s=s%60;return m+':'+(s<10?'0':'')+s}
+function fmin(m){return m>=120?(Math.round(m/6)/10)+' h':Math.round(m)+' min'}
 function esc(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;')}
-var segs=[1,3,5,10],lims=[4,8,16,32,64,0],slims=[2,4,8,16,32,0],imps={off:'Crash detection: off',low:'Crash detection: low (2.5 g)',medium:'Crash detection: medium (1.6 g)',high:'Crash detection: high (1 g)'},wheres={auto:'Save to: automatic (SD card if present)',phone:'Save to: phone storage',sd:'Save to: SD card',custom:'Save to: chosen folder'};
+var segs=[1,3,5,10],lims=[-1,4,8,16,32,64,0],slims=[-1,2,4,8,16,32,0],imps={off:'Crash detection: off',low:'Crash detection: low (2.5 g)',medium:'Crash detection: medium (1.6 g)',high:'Crash detection: high (1 g)'},wheres={auto:'Save to: automatic (SD card if present)',phone:'Save to: phone storage',sd:'Save to: SD card',custom:'Save to: chosen folder'};
 function recRender(){
  var r=st&&st.recording;if(!r)return;
  var on=r.state=='recording';
  $('rdot').className='dot'+(on?' rec':'');$('rstate').className='state'+(on?' rec':'');
- $('rstate').textContent=on?'REC '+hms(r.seconds):r.state;
+ $('rstate').textContent=on?'REC '+hms(r.seconds):r.halted?'RECORDING STOPPED':r.state;
  $('rloc').textContent=r.location?r.location.split(' (')[0]:'';
- var i=r.error&&r.state=='error'?r.error:('Saved clips: '+r.saved+' \u2013 loop: '+r.files+' older file'+(r.files==1?'':'s')+' ('+mb(r.usedMB*1048576)+')'+(r.freeMB!=null?' \u2013 '+mb(r.freeMB*1048576)+' free':''));
- if(r.dropped)i+=' - '+r.dropped+' frames dropped (storage too slow)';
- if(on&&r.writeMBps)i+=' - writing '+r.writeMBps.toFixed(1)+' MB/s';
+ var i=r.error&&r.state=='error'?r.error:((r.place||'')+(r.freeMB!=null?' \u00b7 '+mb(r.freeMB*1048576)+' free':'')+(r.footageMin!=null?' \u00b7 keeps ~'+fmin(r.footageMin):''));
+ if(r.dropped)i+=' \u00b7 '+r.dropped+' frames dropped';
+ if(on&&r.writeMBps)i+=' \u00b7 writing '+r.writeMBps.toFixed(1)+' MB/s';
+ $('rstor').textContent=r.location?('Loop: '+r.files+' file'+(r.files==1?'':'s')+', '+mb(r.usedMB*1048576)+' of '+(r.loopLimitGB==null?'all free space':r.loopLimitGB+' GB')+(r.limitGB<0?' (auto)':'')
+  +'\nSaved clips: '+r.saved+', '+mb((r.savedUsedMB||0)*1048576)+' of '+(r.savedLimitNowGB==null?'no limit':r.savedLimitNowGB+' GB')+(r.savedLimitGB<0?' (auto)':'')
+  +(r.freeMB!=null?'\n'+mb(r.freeMB*1048576)+' free, '+mb(r.reserveMB*1048576)+' always kept free':'')
+  +(r.footageMin!=null?'\nThe loop keeps about '+fmin(r.footageMin)+' of footage at this quality':'')):'The place is decided when recording starts.';
+ $('rdel').disabled=!st.canWrite;
  if(r.warning)i='WARNING: '+r.warning+' \u2013 '+i;
- $('rinfo').textContent=r.enabled?i:'Recording is stopped';$('rinfo').style.color=r.warning?'#ff8a8a':'';
+ if(r.halted)i='RECORDING IS NOT WORKING: '+r.incident+' – fix it, then press Start recording';
+ $('rinfo').textContent=(r.enabled||r.halted)?i:'Recording is stopped';$('rinfo').style.color=(r.warning||r.halted)?'#ff8a8a':'';
  $('rg').textContent=r.impactAvailable?('G-sensor now '+r.gNow.toFixed(2)+' g, highest in 10 s '+r.gPeak.toFixed(2)+' g'+(r.lastImpact?' \u2013 last impact '+r.lastImpact:'')):'No G-sensor on this phone';
  $('rbtn').textContent=r.enabled?'Stop recording':'Start recording';$('rbtn').disabled=!st.canWrite;
  $('rsave').disabled=!st.canWrite||!on;
@@ -326,10 +358,12 @@ function recRender(){
   +' (within '+g.accuracy+' m) <a style=color:#9cf0b0 target=_blank href=https://www.openstreetmap.org/?mlat='+g.lat+'&mlon='+g.lon+'#map=16/'+g.lat+'/'+g.lon+'>map</a>'):('GPS: '+esc(g.status||''));
  if(Date.now()-touched<2500)return;
  fill($('rseg'),segs,function(v){return 'New file every '+v+' min'});
- fill($('rlim'),lims,function(v){return v?'Keep up to '+v+' GB':'Use all free space'});
+ fill($('rlim'),lims,function(v){return v<0?'Loop space: auto':v?'Loop space: '+v+' GB':'Loop space: all free'});
  fill($('rwhere'),['auto','phone','sd'].concat(r.customFolder?['custom']:[]),function(v){return wheres[v]});
  fill($('rimp'),['off','low','medium','high'],function(v){return imps[v]});
- fill($('rsl'),slims,function(v){return v?'Saved clips: up to '+v+' GB':'Saved clips: no space limit'});
+ fill($('rpl'),[30,60,120,300,0].concat([30,60,120,300,0].indexOf(r.powerLossSec)<0&&r.powerLossSec!=null?[r.powerLossSec]:[]),function(v){return v==0?'Power lost: keep recording':'Power lost: stop after '+(v<120?v+' s':v/60+' min')});
+ $('rpl').value=r.powerLossSec;$('rpl').disabled=!st.canWrite;
+ fill($('rsl'),slims,function(v){return v<0?'Saved clips: auto':v?'Saved clips: '+v+' GB':'Saved clips: no limit'});
  var gp=r.gps||{};
  fill($('runits'),['auto','kmh','mph'],function(v){return v=='auto'?'Speed: automatic ('+(gp.unitText||'')+')':v=='kmh'?'Speed: km/h':'Speed: mph'});
  $('rgo').checked=!!gp.on;$('rsub').checked=!!gp.subtitles;$('runits').value=gp.units||'auto';
@@ -345,7 +379,7 @@ function recList(){
   j.files.forEach(function(f){
    var q='/recordings/file?name='+encodeURIComponent(f.name)+(f.saved?'&saved=1':'');
    h+='<tr><td class=n><a style=margin:0 href='+q+' target=_blank>'+esc(f.name.replace('.mp4','').replace(/^\d{4}-(\d\d-\d\d)_(\d\d)-(\d\d)-(\d\d)/,'$1 $2:$3:$4'))+'</a>'
-    +(f.saved?'<br><span class=tag>'+esc(f.note||'saved')+'</span>':'')+(f.recording?'<br><span class=""tag r"">recording</span>':'')+'</td>'
+    +(f.saved||f.note?'<br><span class=tag>'+esc(f.note||'saved')+'</span>':'')+(f.recording?'<br><span class=""tag r"">recording</span>':'')+'</td>'
     +'<td class=s>'+mb(f.size)+'</td><td class=a><a href='+q+'&dl=1>Download</a><a class=c href='+q.replace('/file?','/srt?')+' title=""Captions (.srt): save next to the video with the same name"">Captions</a>'
     +(st&&st.canWrite?'<a class=k data-a='+(f.saved?'unlock':'lock')+' data-n='+encodeURIComponent(f.name)+'>'+(f.saved?'Unlock':'Keep')+'</a>':'')
     +(f.recording||!(st&&st.canWrite)?'':'<a class=x data-n='+encodeURIComponent(f.name)+' data-s='+(f.saved?1:0)+'>Delete</a>')+'</td></tr>';
@@ -359,17 +393,26 @@ function recPost(path,body,msg){
 }
 $('rsave').onclick=function(){recPost('/recordings/save','','Saving: the current file ends now (and the one before it is kept too); a new file starts with no gap')};
 $('rref').onclick=recList;
+$('lgo').onchange=function(){touched=Date.now();send('log='+(this.checked?'on':'off'))};
+$('rpl').onchange=function(){touched=Date.now();send('powerloss='+(this.value=='0'?'off':this.value))};
+$('rdel').onclick=function(){
+ var s=$('rdels').checked;
+ var t=prompt('Delete ALL loop recordings'+(s?' AND all saved clips':' (saved clips are kept)')+' on the phone? This cannot be undone. Type DELETE to confirm.');
+ if(t===null)return;
+ if(t!=='DELETE'){$('msg').textContent='Nothing deleted (type DELETE in capitals)';return}
+ $('msg').textContent='Deleting...';
+ recPost('/recordings/deleteall','confirm=DELETE&saved='+(s?1:0),'')};
 $('rbtn').onclick=function(){send('record='+(st&&st.recording&&st.recording.enabled?'off':'on'));setTimeout(recList,3000)};
 $('roo').onchange=function(){touched=Date.now();send('recordonopen='+(this.checked?'on':'off'))};
 $('rwhere').onchange=function(){touched=Date.now();send('location='+this.value);setTimeout(recList,2500)};
 $('rseg').onchange=function(){touched=Date.now();send('segment='+this.value)};
-$('rlim').onchange=function(){touched=Date.now();send('storage='+(this.value=='0'?'all':this.value))};
+$('rlim').onchange=function(){touched=Date.now();send('storage='+(this.value=='0'?'all':this.value=='-1'?'auto':this.value))};
 $('rimp').onchange=function(){touched=Date.now();send('impact='+this.value)};
 $('rgo').onchange=function(){touched=Date.now();send('gps='+(this.checked?'on':'off'))};
 $('runits').onchange=function(){touched=Date.now();send('units='+this.value)};
 $('rsub').onchange=function(){touched=Date.now();send('subtitles='+(this.checked?'on':'off'))};
 $('rkn').onchange=function(){touched=Date.now();send('keepnext='+(this.checked?'on':'off'))};
-$('rsl').onchange=function(){touched=Date.now();send('savedlimit='+(this.value=='0'?'none':this.value))};
+$('rsl').onchange=function(){touched=Date.now();send('savedlimit='+(this.value=='0'?'none':this.value=='-1'?'auto':this.value))};
 $('rrs').onchange=function(){touched=Date.now();send('replacesaved='+(this.checked?'on':'off'))};
 $('rlist').onclick=function(e){var a=e.target;if(!a.getAttribute||!a.getAttribute('data-n'))return;
  var act=a.getAttribute('data-a');
@@ -378,7 +421,9 @@ $('rlist').onclick=function(e){var a=e.target;if(!a.getAttribute||!a.getAttribut
   recPost('/recordings/'+act,'name='+encodeURIComponent(nm),(act=='lock'?'Keeping ':'Unlocked ')+nm);return}
  var n=decodeURIComponent(a.getAttribute('data-n'));if(!confirm('Delete '+n+'?'))return;
  recPost('/recordings/delete','name='+encodeURIComponent(n)+'&saved='+a.getAttribute('data-s'),'Deleted '+n)};
-load();setInterval(load,3000);setInterval(recRender,1000);recList();setInterval(recList,20000);
+// the list is only fetched while the Storage section is open (it is cheap now, but nobody sees it folded)
+function listShown(){return $('rlist').offsetParent!==null}
+load();setInterval(load,3000);setInterval(recRender,1000);if(listShown())recList();setInterval(function(){if(listShown())recList()},10000);
 </script></body></html>";
     }
 }

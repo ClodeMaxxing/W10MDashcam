@@ -39,6 +39,24 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
         </Style>
+        <!-- A small (i) at the top right of a setting: its explanation opens in a pop-up instead of taking space. -->
+        <Style x:Key="InfoButton" TargetType="Button">
+            <Setter Property="Content" Value="&#x24D8;" />
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="Foreground" Value="#3FBF5F" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,0,2,2" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+        <Style x:Key="InfoText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="300" />
+        </Style>
         <!-- Plain action buttons: dark green with a soft green edge. -->
         <Style TargetType="Button">
             <Setter Property="Background" Value="#123320" />
@@ -78,9 +96,30 @@
                     <Button x:Name="StartButton" Grid.Column="2" Content="Start streaming" HorizontalAlignment="Stretch" FontSize="13"
                             Click="LiveButton_Click" IsEnabled="False" />
                 </Grid>
+                <!-- Aiming the camera: the picture for 60 s after the last touch, then the black screen again (MainPage.xaml.cs). -->
+                <Button x:Name="ShowPictureButton" Content="Show camera picture (60 s)" HorizontalAlignment="Stretch"
+                        Margin="0,-2,0,6" Click="ShowPictureButton_Click" />
                 <!-- Dashcam recording card: REC state, the Save clip button, storage summary. -->
                 <Border Background="#140707" BorderBrush="#3A1F1F" BorderThickness="1" CornerRadius="6" Padding="10,8,10,8" Margin="0,0,0,6">
                     <StackPanel>
+                        <!-- Shown when recording has stopped by itself (storage full, too slow, card missing): a warning that cannot be missed. -->
+                        <Border x:Name="IncidentBorder" Visibility="Collapsed" Background="#B00020" BorderBrush="#FF6B6B" BorderThickness="1"
+                                CornerRadius="4" Padding="10,8,10,8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock x:Name="IncidentText" Text="" FontSize="14" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
+                                <Button x:Name="IncidentResumeButton" Content="RESUME RECORDING" HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                                        FontWeight="Bold" Background="#FFFFFF" Foreground="#B00020" Click="IncidentResumeButton_Click" />
+                            </StackPanel>
+                        </Border>
+                        <!-- Shown when the charger goes: a countdown before recording stops to save the battery (Recording options). -->
+                        <Border x:Name="PowerLossBorder" Visibility="Collapsed" Background="#7A3A00" BorderBrush="#FFB040" BorderThickness="1"
+                                CornerRadius="4" Padding="10,8,10,8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock x:Name="PowerLossMessage" Text="" FontSize="14" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
+                                <Button x:Name="PowerLossButton" Content="KEEP RECORDING" HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                                        FontWeight="Bold" Background="#FFFFFF" Foreground="#7A3A00" Click="PowerLossButton_Click" />
+                            </StackPanel>
+                        </Border>
                         <StackPanel Orientation="Horizontal">
                             <Ellipse x:Name="RecDot" Width="10" Height="10" Fill="#555555" VerticalAlignment="Center" Margin="0,0,7,0" />
                             <TextBlock x:Name="RecStateText" Text="OFF" FontSize="13" FontWeight="SemiBold" Foreground="#F0B0B0" CharacterSpacing="60" VerticalAlignment="Center" />
@@ -174,22 +213,21 @@
                             </Border>
                             <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource Tile}">
                                 <StackPanel>
-                                    <TextBlock Text="ENGINE" Style="{StaticResource TileLabel}" />
-                                    <Border x:Name="EngBadge" CornerRadius="9" BorderThickness="1" Padding="5,1,6,1" Margin="0,3,0,0" HorizontalAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Ellipse x:Name="EngBadgeDot" Width="6" Height="6" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                            <TextBlock x:Name="EngBadgeText" FontSize="10" FontWeight="SemiBold" />
-                                        </StackPanel>
-                                    </Border>
+                                    <TextBlock Text="SPEED" Style="{StaticResource TileLabel}" />
+                                    <TextBlock x:Name="SpeedValText" Text="-" Style="{StaticResource TileValue}" />
+                                    <Grid x:Name="SpeedBar" Height="6" Margin="0,3,0,0" Background="#06100A" BorderBrush="#1F3A26" BorderThickness="1" CornerRadius="3">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="0*" /><ColumnDefinition Width="100*" /></Grid.ColumnDefinitions>
+                                        <Border x:Name="SpeedBarFill" Background="#39FF14" CornerRadius="2" />
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                             <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource Tile}">
                                 <StackPanel>
-                                    <TextBlock Text="LATENCY" Style="{StaticResource TileLabel}" />
-                                    <TextBlock x:Name="LatText" Text="-" Style="{StaticResource TileValue}" />
-                                    <Grid x:Name="LatBar" Height="6" Margin="0,3,0,0" Background="#06100A" BorderBrush="#1F3A26" BorderThickness="1" CornerRadius="3">
+                                    <TextBlock Text="STORAGE" Style="{StaticResource TileLabel}" />
+                                    <TextBlock x:Name="StoreText" Text="-" Style="{StaticResource TileValue}" />
+                                    <Grid x:Name="StoreBar" Height="6" Margin="0,3,0,0" Background="#06100A" BorderBrush="#1F3A26" BorderThickness="1" CornerRadius="3">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="0*" /><ColumnDefinition Width="100*" /></Grid.ColumnDefinitions>
-                                        <Border x:Name="LatBarFill" Background="#39FF14" CornerRadius="2" />
+                                        <Border x:Name="StoreBarFill" Background="#39FF14" CornerRadius="2" />
                                     </Grid>
                                 </StackPanel>
                             </Border>
@@ -208,103 +246,158 @@
                         <Border x:Name="LoginNotice" Visibility="Collapsed" BorderBrush="#7D6E2E" BorderThickness="3,1,1,1" CornerRadius="5" Background="#1A1808" Padding="8,5,8,5" Margin="0,8,0,0">
                             <TextBlock Text="Default login admin / admin in use. Change it under Network and login." FontSize="11" Foreground="#E8D8A0" TextWrapping="Wrap" />
                         </Border>
+                        <Border x:Name="StorageNotice" Visibility="Collapsed" BorderBrush="#7D6E2E" BorderThickness="3,1,1,1" CornerRadius="5" Background="#1A1808" Padding="8,5,8,5" Margin="0,6,0,0">
+                            <TextBlock x:Name="StorageNoticeText" Text="" FontSize="11" Foreground="#E8D8A0" TextWrapping="Wrap" />
+                        </Border>
+                        <Border x:Name="ChargerNoticeBorder" Visibility="Collapsed" BorderBrush="#7D6E2E" BorderThickness="3,1,1,1" CornerRadius="5" Background="#1A1808" Padding="8,5,8,5" Margin="0,6,0,0">
+                            <TextBlock x:Name="ChargerNoticeText" Text="" FontSize="11" Foreground="#E8D8A0" TextWrapping="Wrap" />
+                        </Border>
                     </StackPanel>
                 </Border>
                 <TextBlock x:Name="AlertText" Text="" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,0,0,4" />
-                <Button x:Name="ShowPictureButton" Content="Show camera picture (60 s)" HorizontalAlignment="Stretch"
-                        Margin="0,2,0,4" Click="ShowPictureButton_Click" />
                 <Button x:Name="PowerSaveButton" Content="Black out the screen now" HorizontalAlignment="Stretch"
                         Margin="0,0,0,6" Click="PowerSaveButton_Click" />
 
-                <Button Style="{StaticResource FoldButton}" Tag="RecordingPanel|RECORDING" Content="RECORDING  &#x25B8;" Click="Fold_Click" />
+                <Button Style="{StaticResource FoldButton}" Tag="RecordingPanel|RECORDING OPTIONS" Content="RECORDING OPTIONS  &#x25B8;" Click="Fold_Click" />
                 <StackPanel x:Name="RecordingPanel" Visibility="Collapsed">
                     <ToggleSwitch x:Name="RecordOnOpenToggle" Header="Record when the app opens" IsOn="True" Toggled="RecordOnOpenToggle_Toggled" />
-                    <ComboBox x:Name="LocationBox" Header="Save recordings to" SelectionChanged="LocationBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,4" />
-                    <Button x:Name="ChooseFolderButton" Content="Choose folder..." HorizontalAlignment="Stretch" Click="ChooseFolderButton_Click" Margin="0,0,0,2" />
-                    <TextBlock x:Name="LocationText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <Grid>
+                        <ComboBox x:Name="PowerLossBox" Header="Stop when the power is lost" SelectionChanged="PowerLossBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="When the charger is disconnected (the car is switched off), a countdown shows on the screen. When it ends, recording and live view stop so the battery is not run flat; they start again when the power returns. Keep recording on the countdown skips it once. Never: keep recording on battery." /></Flyout></Button.Flyout></Button>
+                    </Grid>
                     <ComboBox x:Name="SegmentBox" Header="New file every" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <ComboBox x:Name="LimitBox" Header="Space for loop recording" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <ComboBox x:Name="ImpactBox" Header="Crash detection (saves a clip on impact)" SelectionChanged="ImpactBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
+                    <Grid>
+                        <ComboBox x:Name="ImpactBox" Header="Crash detection" SelectionChanged="ImpactBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="On a jolt above the chosen level, the current file, the one before and the next one are saved. Taps on the screen within 2 s don't count. The camera button saves a clip too." /></Flyout></Button.Flyout></Button>
+                    </Grid>
                     <TextBlock x:Name="ImpactText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <ToggleSwitch x:Name="KeepNextToggle" Header="Save clip also keeps the next file" IsOn="True" Toggled="KeepNextToggle_Toggled" />
-                    <ComboBox x:Name="SavedLimitBox" Header="Space for saved clips" SelectionChanged="SavedLimitBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
-                    <ToggleSwitch x:Name="ReplaceSavedToggle" Header="Replace the oldest saved clips when full" IsOn="False" Toggled="ReplaceSavedToggle_Toggled" />
                     <ToggleSwitch x:Name="GpsToggle" Header="GPS speed and position" IsOn="True" Toggled="GpsToggle_Toggled" />
                     <TextBlock x:Name="GpsText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,-4,0,4" />
                     <ComboBox x:Name="UnitsBox" Header="Speed in" SelectionChanged="UnitsBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
-                    <ToggleSwitch x:Name="SubtitlesToggle" Header="Date, time, speed and position in recordings (subtitles)" IsOn="True" Toggled="SubtitlesToggle_Toggled" />
-                    <TextBlock Text="The oldest files are deleted to stay within this space. Saved clips (the current and the previous file) are never deleted, and files the app did not record are never touched. The camera button saves a clip too. Recordings: on the web page at /camera." FontSize="11" Foreground="#7F9A86" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <Grid>
+                        <ToggleSwitch x:Name="SubtitlesToggle" Header="Time, speed and position in recordings" IsOn="True" Toggled="SubtitlesToggle_Toggled" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="A subtitle track inside each recording: date and time, speed, position and IMPACT markers. VLC and most players show it (Subtitle menu); the web page can also download it as an .srt file." /></Flyout></Button.Flyout></Button>
+                    </Grid>
+                </StackPanel>
+
+                <Button Style="{StaticResource FoldButton}" Tag="StoragePanel|STORAGE" Content="STORAGE  &#x25B8;" Click="Fold_Click" />
+                <StackPanel x:Name="StoragePanel" Visibility="Collapsed">
+                    <TextBlock x:Name="StorageText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,4,0,6" />
+                    <Grid>
+                        <ComboBox x:Name="LocationBox" Header="Save recordings to" SelectionChanged="LocationBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Automatic uses the SD card when there is one, and the phone's storage when the card is missing or full. Avoid folders inside Videos, Pictures or Music: Windows indexes them, which slows recording down. Recordings can be watched and downloaded on the web page (/camera)." /></Flyout></Button.Flyout></Button>
+                    </Grid>
+                    <Button x:Name="ChooseFolderButton" Content="Choose folder..." HorizontalAlignment="Stretch" Click="ChooseFolderButton_Click" Margin="0,0,0,2" />
+                    <TextBlock x:Name="LocationText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <Grid>
+                        <ComboBox x:Name="LimitBox" Header="Space for loop recording" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="The oldest loop recordings are deleted to stay within this space. Automatic gives them what the storage has left after the saved clips and a small reserve. Files the app did not record are never touched." /></Flyout></Button.Flyout></Button>
+                    </Grid>
+                    <Grid>
+                        <ComboBox x:Name="SavedLimitBox" Header="Space for saved clips" SelectionChanged="SavedLimitBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Saved clips (Save clip, the camera button, crash detection, Keep on the web page) are never deleted by loop recording. Automatic: about a fifth of the storage, 1 to 8 GB." /></Flyout></Button.Flyout></Button>
+                    </Grid>
+                    <ToggleSwitch x:Name="ReplaceSavedToggle" Header="Replace the oldest saved clips when full" IsOn="False" Toggled="ReplaceSavedToggle_Toggled" />
+                    <Grid Margin="0,2,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="6" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="DeleteAllButton" Content="Delete all..." HorizontalAlignment="Stretch" FontSize="13" Click="DeleteAllButton_Click"
+                                Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
+                        <Button x:Name="FormatSdButton" Grid.Column="2" Content="Format SD..." HorizontalAlignment="Stretch" FontSize="13" Click="FormatSdButton_Click"
+                                Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
+                    </Grid>
                 </StackPanel>
 
                 <Button Style="{StaticResource FoldButton}" Tag="VideoPanel|VIDEO" Content="VIDEO  &#x25B8;" Click="Fold_Click" />
                 <StackPanel x:Name="VideoPanel" Visibility="Collapsed">
-                    <TextBlock x:Name="VideoAlert" Text="THERMAL RECOVERY MODE: VIDEO LOWERED TO 1080P / 6 MBPS UNTIL CHARGING RESUMES" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
+                    <TextBlock x:Name="VideoAlert" Text="Heat protection: 1080p / 6 Mbps" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
                     <ComboBox x:Name="ResolutionBox" Header="Resolution" SelectionChanged="Setting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
                     <ComboBox x:Name="BitrateBox" Header="Bitrate" SelectionChanged="Setting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <ToggleSwitch x:Name="HighBwToggle" Header="High bandwidth (over 24 Mbps)" IsOn="False" Toggled="HighBwToggle_Toggled" />
-                    <TextBlock Text="Needs 5 GHz Wi-Fi or USB-C; drops frames on 2.4 GHz." Foreground="#7F9A86" FontSize="12" TextWrapping="Wrap" Margin="0,-4,0,6" />
+                    <Grid>
+                        <ToggleSwitch x:Name="HighBwToggle" Header="High bandwidth (over 24 Mbps)" IsOn="False" Toggled="HighBwToggle_Toggled" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Unlocks bitrates above 24 Mbps. The live stream needs 5 GHz Wi-Fi or USB-C; on 2.4 GHz it drops frames." /></Flyout></Button.Flyout></Button>
+                    </Grid>
                     <ComboBox x:Name="KeyframeBox" Header="Keyframe every" SelectionChanged="Setting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
                     <ToggleSwitch x:Name="AudioToggle" Header="Microphone audio (AAC)" IsOn="False" Toggled="AudioToggle_Toggled" />
                 </StackPanel>
 
                 <Button Style="{StaticResource FoldButton}" Tag="CameraPanel|CAMERA" Content="CAMERA  &#x25B8;" Click="Fold_Click" />
                 <StackPanel x:Name="CameraPanel" Visibility="Collapsed">
-                    <CheckBox x:Name="AutoCameraCheck" Content="Automatic focus, exposure and white balance" IsChecked="True"
-                              Checked="AutoCameraCheck_Changed" Unchecked="AutoCameraCheck_Changed" />
+                    <ToggleSwitch x:Name="AutoCameraCheck" Header="Automatic focus, exposure and white balance" IsOn="True" Toggled="AutoCameraCheck_Changed" />
                     <Button x:Name="FocusOnceButton" Content="Focus once and lock" Click="FocusOnceButton_Click" HorizontalAlignment="Stretch" Margin="0,2,0,4" />
                     <TextBlock x:Name="TuningStateText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,4" />
                     <!-- Shown while at least one setting is manual. Each row: label + its own Auto box, then the slider
                          (greyed out while that setting is automatic). All three on Auto hides this panel again. -->
                     <StackPanel x:Name="ManualCameraPanel" Visibility="Collapsed">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock x:Name="FocusLabel" Text="Focus" FontSize="12" VerticalAlignment="Center" />
-                            <CheckBox x:Name="FocusAutoCheck" Grid.Column="1" Content="Auto" MinWidth="0" FontSize="12"
-                                      Checked="SubAuto_Changed" Unchecked="SubAuto_Changed" />
-                        </Grid>
+                        <!-- Each setting: its value as the switch's header, Auto / Manual, then the slider (greyed out on Auto). -->
+                        <TextBlock x:Name="FocusLabel" Text="Focus" FontSize="12" Margin="0,4,0,0" />
+                        <ToggleSwitch x:Name="FocusAutoCheck" OnContent="Auto" OffContent="Manual" Toggled="SubAuto_Changed" Margin="0,-6,0,-6" />
                         <Slider x:Name="FocusSlider" Minimum="0" Maximum="100" StepFrequency="1" Margin="0,-6,0,0" ValueChanged="TuningSlider_ValueChanged" />
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock x:Name="ExposureLabel" Text="Exposure" FontSize="12" VerticalAlignment="Center" />
-                            <CheckBox x:Name="ExposureAutoCheck" Grid.Column="1" Content="Auto" MinWidth="0" FontSize="12"
-                                      Checked="SubAuto_Changed" Unchecked="SubAuto_Changed" />
-                        </Grid>
+                        <TextBlock x:Name="ExposureLabel" Text="Exposure" FontSize="12" />
+                        <ToggleSwitch x:Name="ExposureAutoCheck" OnContent="Auto" OffContent="Manual" Toggled="SubAuto_Changed" Margin="0,-6,0,-6" />
                         <Slider x:Name="ExposureSlider" Minimum="0" Maximum="100" StepFrequency="0.5" Margin="0,-6,0,0" ValueChanged="TuningSlider_ValueChanged" />
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock x:Name="WbLabel" Text="White balance" FontSize="12" VerticalAlignment="Center" />
-                            <CheckBox x:Name="WbAutoCheck" Grid.Column="1" Content="Auto" MinWidth="0" FontSize="12"
-                                      Checked="SubAuto_Changed" Unchecked="SubAuto_Changed" />
-                        </Grid>
+                        <TextBlock x:Name="WbLabel" Text="White balance" FontSize="12" />
+                        <ToggleSwitch x:Name="WbAutoCheck" OnContent="Auto" OffContent="Manual" Toggled="SubAuto_Changed" Margin="0,-6,0,-6" />
                         <Slider x:Name="WbSlider" Minimum="2000" Maximum="8000" StepFrequency="100" Margin="0,-6,0,0" ValueChanged="TuningSlider_ValueChanged" />
                     </StackPanel>
-                    <TextBlock x:Name="TorchAlert" Text="THERMAL RECOVERY MODE: FLASHLIGHT UNAVAILABLE UNTIL CHARGING RESUMES" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
+                    <TextBlock x:Name="TorchAlert" Text="Heat protection: flashlight locked" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
                     <ToggleSwitch x:Name="TorchToggle" Header="Flashlight" IsOn="False" Toggled="TorchToggle_Toggled" />
                     <TextBlock x:Name="TorchNote" Text="" Foreground="#7F9A86" FontSize="12" TextWrapping="Wrap" Margin="0,-4,0,4" />
                 </StackPanel>
 
                 <Button Style="{StaticResource FoldButton}" Tag="PowerPanel|POWER" Content="POWER  &#x25B8;" Click="Fold_Click" />
                 <StackPanel x:Name="PowerPanel" Visibility="Collapsed">
-                    <TextBlock x:Name="PowerAlert" Text="THERMAL RECOVERY MODE: POWER SAVING IS FORCED ON UNTIL CHARGING RESUMES" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
-                    <ToggleSwitch x:Name="PowerSaveToggle" Header="Black screen while streaming" IsOn="True" Toggled="PowerSaveToggle_Toggled" />
-                    <TextBlock Text="Tap the black screen to read the status for 15 s. Show camera picture lights it for 60 s (the stream restarts briefly to start and stop the picture). The start/stop chirp follows the phone's Ringer + notifications volume." Foreground="#7F9A86" FontSize="12" TextWrapping="Wrap" Margin="0,-4,0,6" />
-                    <CheckBox x:Name="SaveAllCheck" Content="Power-saving camera features" IsChecked="True"
-                              Checked="SaveAll_Changed" Unchecked="SaveAll_Changed" />
-                    <TextBlock Text="Less processing and heat. Untick to choose each one." Foreground="#7F9A86" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,2" />
+                    <TextBlock x:Name="PowerAlert" Text="Heat protection: power saving forced on" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
+                    <Grid>
+                        <ToggleSwitch x:Name="PowerSaveToggle" Header="Black screen while streaming" IsOn="True" Toggled="PowerSaveToggle_Toggled" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Tap the black screen to read the status for 15 s. Show camera picture lights it for 60 s (the stream restarts briefly to start and stop the picture). A recording problem lifts the black screen by itself. The start/stop chirp follows the Ringer + notifications volume." /></Flyout></Button.Flyout></Button>
+                    </Grid>
+                    <Grid>
+                        <ToggleSwitch x:Name="SaveAllCheck" Header="Power-saving camera features" IsOn="True" Toggled="SaveAll_Changed" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Less processing and heat: stabilization off for a fixed mount, and focus held once it has settled. Switch it off to choose each one." /></Flyout></Button.Flyout></Button>
+                    </Grid>
                     <StackPanel x:Name="SavePanel" Visibility="Collapsed" Margin="14,0,0,4">
-                        <CheckBox x:Name="SaveOisCheck" Content="Stabilization off (fixed mount)" FontSize="12" Checked="SaveSub_Changed" Unchecked="SaveSub_Changed" />
-                        <CheckBox x:Name="SaveFocusCheck" Content="Hold focus once it has settled" FontSize="12" Checked="SaveSub_Changed" Unchecked="SaveSub_Changed" />
+                        <ToggleSwitch x:Name="SaveOisCheck" Header="Stabilization off (fixed mount)" Toggled="SaveSub_Changed" />
+                        <ToggleSwitch x:Name="SaveFocusCheck" Header="Hold focus once it has settled" Toggled="SaveSub_Changed" />
                     </StackPanel>
                 </StackPanel>
 
                 <Button Style="{StaticResource FoldButton}" Tag="NetworkPanel|NETWORK AND LOGIN" Content="NETWORK AND LOGIN  &#x25B8;" Click="Fold_Click" />
                 <StackPanel x:Name="NetworkPanel" Visibility="Collapsed">
-                    <TextBlock Text="RTSP address (NVR / VLC):" Foreground="#7F9A86" FontSize="12" />
+                    <Grid>
+                        <ToggleSwitch x:Name="WebServerToggle" Header="Web page (settings and recordings)" IsOn="False" Toggled="WebServerToggle_Toggled" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Lets a browser on the same Wi-Fi (or the PC on the USB cable) see the status, change settings, and play or download recordings, with the login below. Off: nothing is served; the app only records." /></Flyout></Button.Flyout></Button>
+                    </Grid>
+                    <TextBlock x:Name="WebAddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap"
+                               FontSize="13" FontWeight="SemiBold" Margin="0,-4,0,6" />
+                    <Grid>
+                        <ToggleSwitch x:Name="LogServerToggle" Header="Log and stats pages" IsOn="False" Toggled="LogServerToggle_Toggled" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Also serves the app's log (/log) and graphs of the last 12 hours (/stats: frame rate, storage, battery, power, heat, memory). Needs the web page on." /></Flyout></Button.Flyout></Button>
+                    </Grid>
+                    <TextBlock Text="Live view (RTSP, for VLC or an NVR):" Foreground="#7F9A86" FontSize="12" />
                     <TextBlock x:Name="AddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap"
                                FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <ToggleSwitch x:Name="AutoStartToggle" Header="Live stream when the app opens" IsOn="True" Toggled="AutoStartToggle_Toggled" />
-                    <ToggleSwitch x:Name="UdpToggle" Header="Allow RTP over UDP" IsOn="False" Toggled="UdpToggle_Toggled" />
-                    <TextBlock Text="TCP is more reliable on Wi-Fi." Foreground="#7F9A86" FontSize="12" TextWrapping="Wrap" Margin="0,-4,0,6" />
+                    <ToggleSwitch x:Name="AutoStartToggle" Header="Live stream when the app opens" IsOn="False" Toggled="AutoStartToggle_Toggled" />
+                    <Grid>
+                        <ToggleSwitch x:Name="UdpToggle" Header="Allow RTP over UDP" IsOn="False" Toggled="UdpToggle_Toggled" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Off: viewers get the stream over TCP, which is more reliable on Wi-Fi." /></Flyout></Button.Flyout></Button>
+                    </Grid>
                     <ToggleSwitch x:Name="SnapshotToggle" Header="Snapshots at /snapshot.jpg" IsOn="False" Toggled="SnapshotToggle_Toggled" />
                     <TextBlock Text="Login (stream and web page)" Foreground="#7F9A86" FontSize="12" Margin="0,8,0,0" />
                     <TextBlock x:Name="LoginStatusText" Text="" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4" />

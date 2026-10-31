@@ -41,15 +41,19 @@ namespace W10MDashcam.Recording
         // ---- settings (read by the worker as they change)
         public volatile bool Enabled = true;
         public volatile int SegmentSeconds = 180;
-        /// <summary>Most space the loop recordings may use (saved clips are not counted).</summary>
+        /// <summary>Most space the loop recordings may use (saved clips are not counted). Worked out from the card when AutoLoop.</summary>
         public long LimitBytes = 16L << 30;
-        /// <summary>Always leave this much free on the storage.</summary>
+        /// <summary>Always leave this much free on the storage. Worked out from the card's size when auto space is on.</summary>
         public long MinFreeBytes = 1L << 30;
         /// <summary>Save clip also keeps the file after the press (the moments after). Impacts always do.</summary>
         public volatile bool KeepNextFile = true;
         /// <summary>Space for saved clips; above it: a warning, or (ReplaceOldSaved) the oldest saved clips are deleted.</summary>
         public long SavedLimitBytes = 8L << 30;
         public volatile bool ReplaceOldSaved = false;
+        /// <summary>Automatic space: the loop limit is what the card has left after the saved clips and a reserve.</summary>
+        public volatile bool AutoLoop = true;
+        /// <summary>Automatic space: saved clips get about a fifth of what the app may use (1 to 8 GB).</summary>
+        public volatile bool AutoSaved = true;
         /// <summary>Where to record: "auto" (SD card if present, else phone), "phone", "sd", or "custom" (the picked folder).</summary>
         public volatile string StorageMode = "auto";
         /// <summary>Key of the picked folder in the app's future-access list.</summary>
@@ -77,8 +81,13 @@ namespace W10MDashcam.Recording
         private sealed class DropMark { public long Frames; }   // frames were dropped (the writer fell behind)
         private long _dropRun;
         private sealed class AudioFormatItem { public AudioFormat Format; }
-        private enum Cmd { End, Save, Shutdown, Housekeep, Rescan, Relocate, Lock, Unlock }
-        private sealed class Command { public Cmd What; public TaskCompletionSource<bool> Done; public string Reason, Name; public bool KeepNext; }
+        private enum Cmd { End, Save, Shutdown, Housekeep, Rescan, Relocate, Lock, Unlock, Resume, Delete, DeleteAll, TestHalt }
+        private sealed class Command
+        {
+            public Cmd What; public TaskCompletionSource<bool> Done; public string Reason, Name; public bool KeepNext;
+            public bool All;       // Delete: the file is a saved clip; DeleteAll: saved clips too
+            public string Result;  // Delete / DeleteAll: what happened (null = done, for Delete)
+        }
 
         // ---- worker state
         private byte[] _sps, _pps;
@@ -126,6 +135,39 @@ namespace W10MDashcam.Recording
         public bool SavedFull { get; private set; }
         /// <summary>A storage warning to show (empty when all is well).</summary>
         public string Warning { get; private set; } = "";
+        /// <summary>
+        /// Recording has stopped by itself because the storage needs the user (Incident says why). Stays until Resume.
+        /// Frames are not recorded meanwhile; the live view, if on, carries on.
+        /// </summary>
+        public volatile bool Halted;
+        /// <summary>Why recording stopped (empty when it has not).</summary>
+        public string Incident { get; private set; } = "";
+        /// <summary>Average bytes per second of the recent files (0 until a file of over a minute has been finished).</summary>
+        public double BytesPerSecond { get; private set; }
+        /// <summary>For "about N h of footage": the finished files' rate, or the current write rate until one has finished.</summary>
+        public double EstimatedBytesPerSecond => BytesPerSecond > 0 ? BytesPerSecond : WriteMBps * 1048576.0;
+        /// <summary>The recordings are on the SD card (as opposed to the phone's own storage or a picked folder).</summary>
+        public bool OnSd { get; private set; }
+        /// <summary>Warnings from the storage size and from dropped frames; Warning shows the more urgent.</summary>
+        private string _storageWarning = "", _dropWarning = "";
+        /// <summary>Recent dropped-frame runs, for spotting a storage that cannot keep up.</summary>
+        private readonly List<KeyValuePair<DateTime, long>> _dropEvents = new List<KeyValuePair<DateTime, long>>();
+        /// <summary>Failures to start a file in a row (the file system or the card is not usable).</summary>
+        private int _failStreak;
+        /// <summary>Automatic location: the SD card is not used before this time (it was full).</summary>
+        private DateTime _sdAvoidUntil = DateTime.MinValue;
+        /// <summary>The SD card is not used (Format SD card: the phone's storage is used until ReturnToSd).</summary>
+        private volatile bool _sdReleased;
+        /// <summary>Saved clips (names, sizes), so the web list and housekeeping need not re-read the folder. Worker only.</summary>
+        private List<RecordingInfo> _savedList;
+        private bool _savedDirty;
+        private DateTime _savedListedAt = DateTime.MinValue;
+        /// <summary>The recordings as last known by the worker, for the web list (replaced whole, read from any thread).</summary>
+        private volatile RecordingInfo[] _snapshot = new RecordingInfo[0];
+        /// <summary>Frames dropped within a minute that stop recording (about 3 s of 4K30).</summary>
+        private const long DropHaltFrames = 90;
+        /// <summary>Frames dropped within a minute that show a warning (about 1/3 s).</summary>
+        private const long DropWarnFrames = 10;
         /// <summary>
         /// Result of Save clip (raised on the recorder's thread): true + what was kept once the clip's file is finished,
         /// or false + why nothing could be saved.
@@ -244,6 +286,45 @@ namespace W10MDashcam.Recording
         /// <summary>Record somewhere else from now on (StorageMode changed or a new folder picked): the current file ends here.</summary>
         public void Relocate() => Enqueue(new Command { What = Cmd.Relocate }, 0);
 
+        /// <summary>After a halt: record again (the storage is checked again; it halts again if still not usable).</summary>
+        public void Resume()
+        {
+            Enabled = true;
+            Enqueue(new Command { What = Cmd.Resume }, 0);
+        }
+
+        /// <summary>Before formatting the SD card: record to the phone's storage until ReturnToSd.</summary>
+        public void ReleaseSd()
+        {
+            _sdReleased = true;
+            Log("SD card released (for formatting) - recording to phone storage until the app comes back");
+            Relocate();
+        }
+
+        /// <summary>Back from the phone's Settings: use the SD card again (if the mode wants it).</summary>
+        public void ReturnToSd()
+        {
+            if (!_sdReleased) return;
+            _sdReleased = false;
+            Log("SD card: in use again");
+            Relocate();
+        }
+
+        /// <summary>Shows the "recording stopped" warning on purpose, to check how it looks (testincident=1).</summary>
+        public void TestIncident() => Enqueue(new Command { What = Cmd.TestHalt }, 0);
+
+        /// <summary>
+        /// Deletes every recording of the app's here (loop files; saved clips too when includeSaved). The current file
+        /// ends first and recording carries on in a new one. Returns what was done.
+        /// </summary>
+        public async Task<string> DeleteAllAsync(bool includeSaved)
+        {
+            var c = new Command { What = Cmd.DeleteAll, All = includeSaved, Done = new TaskCompletionSource<bool>() };
+            Enqueue(c, 0);
+            await Task.WhenAny(c.Done.Task, Task.Delay(120000));
+            return c.Done.Task.IsCompleted ? c.Result : "Still deleting - check again in a minute";
+        }
+
         /// <summary>Finish the current file and wait (at most a few seconds) - for app suspend.</summary>
         public async Task ShutdownAsync()
         {
@@ -304,7 +385,10 @@ namespace W10MDashcam.Recording
                 case Cmd c: await RunCommandAsync(new Command { What = c }); break;
                 case DropMark d:
                     Log("Recording: the writer fell behind - " + d.Frames + " frames dropped; the file ends here and a new one starts");
-                    if (_seg != null) await CloseAsync(-1);
+                    long lost = NoteDrops(d.Frames);
+                    if (lost >= DropHaltFrames)
+                        await HaltAsync("the storage cannot keep up with the video: " + lost + " frames were dropped in the last minute");
+                    else if (_seg != null) await CloseAsync(-1);
                     _lastVideoTime = -1;
                     break;
                 case Command c: await RunCommandAsync(c); break;
@@ -353,6 +437,27 @@ namespace W10MDashcam.Recording
                         _retryAfter = DateTime.MinValue; // a new place: try at once (the last place's error does not apply)
                         LastError = "";
                         await EnsureFoldersAsync();
+                        break;
+                    case Cmd.Resume:
+                        Halted = false;
+                        Incident = "";
+                        LastError = "";
+                        _failStreak = 0;
+                        _dropEvents.Clear();
+                        _dropWarning = "";
+                        RefreshWarning();
+                        _root = null;                    // look at the storage again
+                        _retryAfter = DateTime.MinValue;
+                        Log("Recording resumed");
+                        break;
+                    case Cmd.Delete:
+                        c.Result = await DeleteOneAsync(c.Name, c.All);
+                        break;
+                    case Cmd.DeleteAll:
+                        c.Result = await DeleteEverythingAsync(c.All);
+                        break;
+                    case Cmd.TestHalt:
+                        await HaltAsync("TEST - this is how a storage problem is shown (nothing is wrong)");
                         break;
                     case Cmd.Rescan:
                         _root = null; // re-read the folder (a file was deleted from the web page)
@@ -472,8 +577,7 @@ namespace W10MDashcam.Recording
                 bool canMakeRoom = free + reclaimable >= MinFreeBytes / 2;
                 if (free >= 0 && free < MinFreeBytes / 2 && !canMakeRoom)
                 {
-                    await FailAsync(FullMessage());
-                    _retryAfter = DateTime.UtcNow.AddSeconds(60);
+                    await StorageGaveOutAsync(FullMessage());
                     return false;
                 }
                 string name = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss") + ".mp4";
@@ -493,6 +597,7 @@ namespace W10MDashcam.Recording
                 if (_protectNext) { _seg.Protect = true; _seg.Note = _nextNote; _protectNext = false; }
                 State = "recording";
                 LastError = "";
+                _failStreak = 0;
                 CurrentSeconds = 0;
                 Log("Recording to " + Location + ": " + file.Name + " (" + writer.Width + " x " + writer.Height + (writer.HasAudio ? ", with sound" : "") + ")");
                 if (DateTime.UtcNow >= _nextHousekeep) await HousekeepAsync();
@@ -521,6 +626,12 @@ namespace W10MDashcam.Recording
             _carryAudio = nextTime >= 0 && s.Audio.Count > 0 ? new List<AudioSample>(s.Audio) : null;
             long size = s.Writer.BytesWritten;
             Log(string.Format("Recording: {0} done ({1:0.0} min, {2:0.0} MB)", s.Name, s.Writer.Duration / (double)Second / 60, size / 1048576.0));
+            double secs = s.Writer.Duration / (double)Second;
+            if (secs >= 60 && size > 0)
+            {
+                double rate = size / secs; // for "about N hours of footage"
+                BytesPerSecond = BytesPerSecond <= 0 ? rate : BytesPerSecond * 0.7 + rate * 0.3;
+            }
             if (State == "recording") State = Enabled ? "starting the next file" : "off";
             if (s.Protect)
             {
@@ -578,6 +689,7 @@ namespace W10MDashcam.Recording
                 _segments.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
                 SavedClips = Math.Max(0, SavedClips - 1);
                 RemoveNote(name);
+                SavedChanged();
                 UpdateTotals();
                 Log("Unlocked " + name + ": back in loop recording (deleted when it is the oldest)");
             }
@@ -701,7 +813,7 @@ namespace W10MDashcam.Recording
         // ---- saved clips whose move is still pending: right after a file closes, the phone's media indexer
         // (library folders such as Videos) or a download can still have it open. Such a clip stays where it is,
         // is never loop-deleted, and the move is retried (also after an app restart: kept in the settings).
-        private sealed class PendingSave { public string Folder, Name; public int Tries; public DateTime Next; }
+        private sealed class PendingSave { public string Folder, Name; public int Tries; public DateTime Next; public long Size; }
         private List<PendingSave> _pending;
         private const string PendingKey = "RecPendingSaves";
 
@@ -737,13 +849,17 @@ namespace W10MDashcam.Recording
             {
                 await f.MoveAsync(_saved, f.Name, NameCollisionOption.GenerateUniqueName);
                 SavedClips++;
+                SavedChanged();
             }
             catch (FileNotFoundException) { }
             catch (Exception ex)
             {
                 Log("Saved clip " + f.Name + " is busy (" + ex.Message.Split('\r', '\n')[0] + ") - it is kept, and moved to Saved as soon as it is free");
-                _pending.Add(new PendingSave { Folder = _loop.Path, Name = f.Name, Tries = 1, Next = DateTime.UtcNow.AddSeconds(2) });
+                long size = 0;
+                try { size = (long)(await f.GetBasicPropertiesAsync()).Size; } catch { }
+                _pending.Add(new PendingSave { Folder = _loop.Path, Name = f.Name, Tries = 1, Next = DateTime.UtcNow.AddSeconds(2), Size = size });
                 StorePending();
+                PublishList();
             }
         }
 
@@ -759,6 +875,7 @@ namespace W10MDashcam.Recording
                     await f.MoveAsync(_saved, f.Name, NameCollisionOption.GenerateUniqueName);
                     SavedClips++;
                     _pending.Remove(p);
+                    SavedChanged();
                     Log("Saved clip " + p.Name + " moved to Saved" + (p.Tries > 1 ? " (after " + p.Tries + " tries)" : ""));
                 }
                 catch (FileNotFoundException) { _pending.Remove(p); }
@@ -791,7 +908,69 @@ namespace W10MDashcam.Recording
             if (s != null) { try { s.Stream.Dispose(); } catch { } _segments.Add(new RecordingInfo { Name = s.Name, Size = s.Writer.BytesWritten }); }
             _root = null; // look for the storage again (the card may have been removed)
             _retryAfter = DateTime.UtcNow.AddSeconds(10);
-            await Task.CompletedTask;
+            // the same failure over and over (no card, a broken file system): stop, and let the user know
+            if (++_failStreak >= 6) await HaltAsync(message);
+        }
+
+        /// <summary>
+        /// Stops recording because the storage needs the user: the file in progress is finished (what was written is
+        /// kept) and the app shows the reason with a Resume button. Nothing is recorded until then.
+        /// </summary>
+        private async Task HaltAsync(string reason)
+        {
+            if (Halted) return;
+            Incident = reason;
+            Halted = true;
+            Enabled = false;
+            LastError = reason;
+            State = "stopped";
+            Log("RECORDING STOPPED: " + reason.TrimEnd('.', ' ') + ". Fix the storage, then tap Resume recording.");
+            if (_cutRequested) { _cutRequested = false; RaiseClip(false, "Clip not saved: recording stopped"); }
+            if (_seg != null) await CloseAsync(-1);
+            _lastVideoTime = -1;
+        }
+
+        /// <summary>Remembers a run of dropped frames; returns the frames dropped in the last minute.</summary>
+        private long NoteDrops(long frames)
+        {
+            _dropEvents.Add(new KeyValuePair<DateTime, long>(DateTime.UtcNow, frames));
+            return DropsInLastMinute();
+        }
+
+        /// <summary>Drops the old runs and updates the dropped-frames warning. Returns the frames dropped in the last minute.</summary>
+        private long DropsInLastMinute()
+        {
+            var now = DateTime.UtcNow;
+            _dropEvents.RemoveAll(x => (now - x.Key).TotalSeconds > 60);
+            long total = 0;
+            foreach (var x in _dropEvents) total += x.Value;
+            string w = total >= DropWarnFrames
+                ? "Frames dropped in the last minute (" + total + ") - the storage or the phone's heat is holding up recording"
+                : "";
+            if (w != _dropWarning) { _dropWarning = w; RefreshWarning(); }
+            return total;
+        }
+
+        private void RefreshWarning() => Warning = _dropWarning.Length > 0 ? _dropWarning : _storageWarning;
+
+        /// <summary>
+        /// The storage is full and nothing of the app's can be deleted. Automatic location: the phone's storage is used
+        /// instead, and the card is looked at again in 10 minutes. Otherwise recording stops and the user is told.
+        /// </summary>
+        private async Task StorageGaveOutAsync(string message)
+        {
+            if (OnSd && (StorageMode ?? "auto") == "auto")
+            {
+                _sdAvoidUntil = DateTime.UtcNow.AddMinutes(10);
+                Log("SD card is full - recording to phone storage instead (the card is checked again in 10 minutes)");
+                if (_seg != null) await CloseAsync(-1);
+                _lastVideoTime = -1;
+                _root = null;     // EnsureFoldersAsync now picks the phone
+                LastError = "";
+                _retryAfter = DateTime.MinValue;
+                return;
+            }
+            await HaltAsync(message);
         }
 
         private async Task IdleChecksAsync()
@@ -804,7 +983,8 @@ namespace W10MDashcam.Recording
                 _lastVideoTime = -1;
                 State = Enabled ? "waiting for video" : "off";
             }
-            if (_seg == null && _lastVideoTime < 0) State = Enabled ? (string.IsNullOrEmpty(LastError) ? "waiting for video" : "error") : "off";
+            if (_seg == null && _lastVideoTime < 0 && !Halted) State = Enabled ? (string.IsNullOrEmpty(LastError) ? "waiting for video" : "error") : "off";
+            DropsInLastMinute(); // lets the dropped-frames warning go away after a quiet minute
             if (_root != null) await RetryPendingAsync();
             if (_root != null && DateTime.UtcNow >= _nextHousekeep) await HousekeepAsync();
         }
@@ -831,8 +1011,16 @@ namespace W10MDashcam.Recording
                     else note = " - no folder chosen yet";
                 }
                 catch (Exception ex) { note = " - the chosen folder is not available (" + ex.Message + ")"; }
+                // released for formatting: a chosen folder on the card (not drive C:, the phone) is not used either
+                if (root != null && _sdReleased && !root.Path.StartsWith("C:", StringComparison.OrdinalIgnoreCase))
+                { root = null; note = " (SD card released for formatting)"; }
             }
-            if (root == null && (mode == "auto" || mode == "sd"))
+            // Automatic: a card found full is left alone for a while (the phone's storage is used meanwhile).
+            // Format SD card: the card is not used at all until the app comes back.
+            bool skipSd = _sdReleased || (mode == "auto" && DateTime.UtcNow < _sdAvoidUntil);
+            if (skipSd) note = _sdReleased ? " (SD card released for formatting)" : " (SD card full - checked again later)";
+            bool onSd = false;
+            if (root == null && (mode == "auto" || mode == "sd") && !skipSd)
             {
                 try
                 {
@@ -841,11 +1029,16 @@ namespace W10MDashcam.Recording
                     {
                         root = await cards[0].CreateFolderAsync("W10MDashcam", CreationCollisionOption.OpenIfExists);
                         where = "SD card (" + root.Path + ")";
+                        onSd = true;
                     }
                     else if (mode == "sd") note = " - no SD card found";
                 }
                 catch (Exception ex) { note = " - SD card not usable (" + ex.Message + ")"; }
             }
+            // The user chose the SD card itself: don't quietly record somewhere else.
+            if (root == null && mode == "sd" && !_sdReleased)
+                throw new InvalidOperationException("The SD card is not available" + (note.Length > 0 ? " (" + note.Trim(' ', '-') + ")" : "")
+                    + ". Insert it, or choose Automatic or Phone storage under Save recordings to.");
             if (root == null)
             {
                 root = await ApplicationData.Current.LocalFolder.CreateFolderAsync("Recordings", CreationCollisionOption.OpenIfExists);
@@ -856,8 +1049,10 @@ namespace W10MDashcam.Recording
             _saved = await root.CreateFolderAsync("Saved", CreationCollisionOption.OpenIfExists);
             _segments.Clear();
             SavedBytes = 0; // measured again by the scan below, for this place
+            _savedList = null;
             LoadPending();
             _root = root;
+            OnSd = onSd;
             if (Location != where) Log("Recordings: " + where);
             Location = where;
             UpdateTotals();
@@ -878,11 +1073,8 @@ namespace W10MDashcam.Recording
                         var p = await f.GetBasicPropertiesAsync();
                         result.Loop.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
                     }
-                    foreach (var f in await ListMp4Async(saved))
-                    {
-                        result.Saved++;
-                        result.SavedBytes += (long)(await f.GetBasicPropertiesAsync()).Size;
-                    }
+                    foreach (var f in (await ListMp4Async(saved)).OrderBy(x => x.Name))
+                        result.SavedList.Add(new RecordingInfo { Name = f.Name, Size = (long)(await f.GetBasicPropertiesAsync()).Size, Saved = true });
                     result.Free = await GetFreeSpaceAsync(loop);
                 }
                 catch (Exception ex) { result.Error = ex.Message; }
@@ -895,8 +1087,7 @@ namespace W10MDashcam.Recording
         {
             public int Gen;
             public readonly List<RecordingInfo> Loop = new List<RecordingInfo>();
-            public int Saved;
-            public long SavedBytes;
+            public readonly List<RecordingInfo> SavedList = new List<RecordingInfo>();
             public long Free = -1;
             public double Seconds;
             public string Error;
@@ -922,8 +1113,11 @@ namespace W10MDashcam.Recording
                 _lastClosedKnown = true;
                 _lastClosed = r.Loop.Where(x => _seg == null || x.Name != _seg.Name).Select(x => x.Name).LastOrDefault();
             }
-            SavedClips = r.Saved;
-            SavedBytes = r.SavedBytes;
+            _savedList = r.SavedList;
+            _savedListedAt = DateTime.UtcNow;
+            _savedDirty = false;
+            SavedClips = _savedList.Count;
+            SavedBytes = _savedList.Sum(x => x.Size);
             if (r.Free >= 0) FreeBytes = r.Free;
             UpdateTotals();
             Log(string.Format(System.Globalization.CultureInfo.InvariantCulture, "Recordings: {0} loop files, {1} saved (listed in {2:0.0} s, in the background)",
@@ -938,6 +1132,27 @@ namespace W10MDashcam.Recording
         {
             LoopCount = _segments.Count;
             LoopBytes = _segments.Sum(x => x.Size);
+            PublishList();
+        }
+
+        /// <summary>A clip went into Saved (or left it): re-read that folder at the next idle moment.</summary>
+        private void SavedChanged()
+        {
+            _savedDirty = true;
+            _nextHousekeep = DateTime.UtcNow;
+        }
+
+        /// <summary>The web list, from what the worker knows: no folder query per page refresh.</summary>
+        private void PublishList()
+        {
+            var list = new List<RecordingInfo>(_segments.Count + 8);
+            foreach (var x in _segments) list.Add(new RecordingInfo { Name = x.Name, Size = x.Size });
+            if (_pending != null && _loop != null)
+                foreach (var p in _pending.Where(x => x.Folder == _loop.Path))
+                    list.Add(new RecordingInfo { Name = p.Name, Size = p.Size, Note = "saving" });
+            if (_savedList != null)
+                foreach (var x in _savedList) list.Add(new RecordingInfo { Name = x.Name, Size = x.Size, Saved = true });
+            _snapshot = list.ToArray();
         }
 
         /// <summary>Loop recording: delete the oldest files while over the limit or short of free space.</summary>
@@ -950,15 +1165,21 @@ namespace W10MDashcam.Recording
             long used = LoopBytes + current;
             // keep room for the file being written to reach its full length
             long headroom = _seg != null ? Math.Max(0, _seg.Writer.BytesWritten * SegmentSeconds / Math.Max(1, (long)CurrentSeconds + 1) - current) : 0;
-            // saved clips: their space, and (if allowed) replace the oldest when over it or when the storage is short
-            var saved = new List<RecordingInfo>();
-            foreach (var f in (await ListMp4Async(_saved)).OrderBy(x => x.Name))
+            // saved clips: their space, and (if allowed) replace the oldest when over it or when the storage is short.
+            // The folder is re-read only after a change (or every 10 minutes), not every minute.
+            if (_savedList == null || _savedDirty || (DateTime.UtcNow - _savedListedAt).TotalMinutes >= 10)
             {
-                var p = await f.GetBasicPropertiesAsync();
-                saved.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
+                var fresh = new List<RecordingInfo>();
+                foreach (var f in (await ListMp4Async(_saved)).OrderBy(x => x.Name))
+                    fresh.Add(new RecordingInfo { Name = f.Name, Size = (long)(await f.GetBasicPropertiesAsync()).Size, Saved = true });
+                _savedList = fresh;
+                _savedListedAt = DateTime.UtcNow;
+                _savedDirty = false;
             }
+            var saved = new List<RecordingInfo>(_savedList);
             SavedClips = saved.Count;
             SavedBytes = saved.Sum(x => x.Size);
+            ApplyAutoSpace(current); // automatic limits first: the deletions below use them
 
             int deleted = 0;
             long freed = 0;
@@ -996,22 +1217,42 @@ namespace W10MDashcam.Recording
                 replaced++;
             }
             SavedClips = saved.Count;
+            _savedList = saved;
+            PublishList();
             if (replaced > 0) Log("Saved clips: replaced the " + replaced + " oldest (space for saved clips is full)");
             SavedFull = SavedBytes > SavedLimitBytes;
 
             bool storageShort = FreeBytes >= 0 && FreeBytes < MinFreeBytes * 2 && _segments.Count == 0;
-            Warning = SavedFull ? string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            _storageWarning = SavedFull ? string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "Saved clips use {0:0.0} GB, over their {1:0} GB - delete some, or allow replacing the oldest", SavedBytes / 1073741824.0, SavedLimitBytes / 1073741824.0)
                 : storageShort ? (SavedBytes >= 256L << 20 ? "Storage nearly full: only saved clips are left to make room"
                                 : "Storage nearly full: other files, not recordings, use the space")
                 : "";
+            RefreshWarning();
 
             if (FreeBytes >= 0 && FreeBytes < MinFreeBytes / 2 && _segments.Count == 0 && _seg != null)
             {
                 await CloseAsync(-1);
-                await FailAsync(FullMessage());
-                _retryAfter = DateTime.UtcNow.AddSeconds(60);
+                _lastVideoTime = -1;
+                await StorageGaveOutAsync(FullMessage()); // Automatic: on to the phone's storage; otherwise recording stops
             }
+        }
+
+        /// <summary>
+        /// Automatic space: what the app may use is the free space plus its own files. Saved clips get about a fifth
+        /// (1 to 8 GB), a reserve of 5% (256 MB to 1 GB) always stays free, and the loop recordings get the rest -
+        /// so a 4 GB card and a 64 GB card both work without any setting.
+        /// </summary>
+        private void ApplyAutoSpace(long current)
+        {
+            if (FreeBytes < 0 || (!AutoLoop && !AutoSaved)) return;
+            long usable = FreeBytes + LoopBytes + SavedBytes + current;
+            long reserve = Math.Max(256L << 20, Math.Min(1L << 30, usable / 20));
+            long savedShare = usable >= (5L << 30) ? Math.Max(1L << 30, Math.Min(8L << 30, usable / 5)) : usable / 5;
+            if (AutoSaved) SavedLimitBytes = savedShare;
+            long savedAllowance = AutoSaved ? savedShare : (SavedLimitBytes == long.MaxValue ? SavedBytes : SavedLimitBytes);
+            if (AutoLoop) LimitBytes = Math.Max(256L << 20, usable - reserve - savedAllowance);
+            MinFreeBytes = reserve;
         }
 
         /// <summary>
@@ -1043,23 +1284,15 @@ namespace W10MDashcam.Recording
 
         // ================================================================ web access (any thread)
 
-        public async Task<IList<RecordingInfo>> ListAsync()
+        /// <summary>The recordings for the web page, from the worker's own lists (no storage query, so polling costs nothing).</summary>
+        public Task<IList<RecordingInfo>> ListAsync()
         {
             var list = new List<RecordingInfo>();
-            var loop = _loop; var saved = _saved;
-            if (loop == null) return list;
-            string current = CurrentName;
-            foreach (var pair in new[] { Tuple.Create(loop, false), Tuple.Create(saved, true) })
-            {
-                foreach (var f in await ListMp4Async(pair.Item1))
-                {
-                    if (!f.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || (!pair.Item2 && !OwnName.IsMatch(f.Name))) continue;
-                    BasicProperties p = await f.GetBasicPropertiesAsync();
-                    list.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size, Saved = pair.Item2, Recording = !pair.Item2 && f.Name == current,
-                        Note = pair.Item2 ? NoteFor(f.Name) : null });
-                }
-            }
-            return list.OrderByDescending(x => x.Name).ToList();
+            foreach (var x in _snapshot)
+                list.Add(new RecordingInfo { Name = x.Name, Size = x.Size, Saved = x.Saved, Note = x.Saved ? NoteFor(x.Name) : x.Note });
+            var s = _seg;
+            if (s != null) list.Add(new RecordingInfo { Name = s.Name, Size = s.Writer.BytesWritten, Recording = true });
+            return Task.FromResult<IList<RecordingInfo>>(list.OrderByDescending(x => x.Name).ToList());
         }
 
         /// <summary>Opens a recording for reading (also the one being written). Null if the name is unknown.</summary>
@@ -1081,20 +1314,89 @@ namespace W10MDashcam.Recording
         public async Task<string> DeleteAsync(string name, bool saved)
         {
             if (!SafeName.IsMatch(name ?? "")) return "bad name";
-            if (!saved && name == CurrentName) return "that file is being recorded";
             if (!saved && !OwnName.IsMatch(name)) return "not a recording";
+            var c = new Command { What = Cmd.Delete, Name = name, All = saved, Done = new TaskCompletionSource<bool>() };
+            Enqueue(c, 0); // on the worker: its lists stay right without re-reading the folder
+            await Task.WhenAny(c.Done.Task, Task.Delay(15000));
+            return c.Done.Task.IsCompleted ? c.Result : "busy - try again in a moment";
+        }
+
+        // ================================================================ deleting (worker)
+
+        private async Task<string> DeleteOneAsync(string name, bool saved)
+        {
+            await EnsureFoldersAsync();
+            if (!saved && _seg != null && name == _seg.Name) return "that file is being recorded";
             var folder = saved ? _saved : _loop;
-            if (folder == null) return "no recordings";
             try
             {
                 var f = await folder.GetFileAsync(name);
                 await f.DeleteAsync(StorageDeleteOption.PermanentDelete);
-                if (saved) SavedClips = Math.Max(0, SavedClips - 1);
-                else Enqueue(new Command { What = Cmd.Rescan }, 0); // the worker refreshes its list
-                Log("Deleted recording " + (saved ? "Saved\\" : "") + name);
-                return null;
             }
             catch (FileNotFoundException) { return "not found"; }
+            catch (Exception ex) { return "could not delete it: " + ex.Message.Split('\r', '\n')[0]; }
+            if (saved)
+            {
+                var info = _savedList?.FirstOrDefault(x => x.Name == name);
+                if (info != null) { _savedList.Remove(info); SavedBytes = Math.Max(0, SavedBytes - info.Size); }
+                SavedClips = Math.Max(0, SavedClips - 1);
+                RemoveNote(name);
+            }
+            else
+            {
+                _segments.RemoveAll(x => x.Name == name);
+                if (_pending != null && _pending.RemoveAll(x => x.Name == name && x.Folder == _loop.Path) > 0) StorePending();
+                if (_lastClosed == name) _lastClosed = null;
+            }
+            UpdateTotals();
+            Log("Deleted recording " + (saved ? "Saved\\" : "") + name);
+            return null;
+        }
+
+        /// <summary>Delete all: lists the folder itself (the background scan may not have finished), deletes the app's files.</summary>
+        private async Task<string> DeleteEverythingAsync(bool includeSaved)
+        {
+            await EnsureFoldersAsync();
+            if (_cutRequested) { _cutRequested = false; RaiseClip(false, "Clip not saved: all recordings were deleted"); }
+            if (_seg != null) { if (includeSaved) _seg.Protect = false; await CloseAsync(-1); } // the next keyframe starts a new file
+            _lastVideoTime = -1;
+            _scanGen++; _scanning = false;     // a scan still running would bring the deleted files back
+            int count = 0, failed = 0;
+            long bytes = 0;
+            async Task Wipe(StorageFolder folder, bool savedFolder)
+            {
+                foreach (var f in await ListMp4Async(folder))
+                {
+                    if (!savedFolder && !OwnName.IsMatch(f.Name)) continue;            // never other people's files
+                    if (!savedFolder && !includeSaved && IsPending(f.Name)) continue; // a saved clip waiting to move
+                    try
+                    {
+                        long size = (long)(await f.GetBasicPropertiesAsync()).Size;
+                        await f.DeleteAsync(StorageDeleteOption.PermanentDelete);
+                        count++; bytes += size;
+                        if (savedFolder) RemoveNote(f.Name);
+                    }
+                    catch (FileNotFoundException) { }
+                    catch { failed++; }
+                }
+            }
+            await Wipe(_loop, false);
+            _segments.Clear();
+            _lastClosed = null;
+            if (includeSaved)
+            {
+                await Wipe(_saved, true);
+                if (_pending != null) { _pending.RemoveAll(x => x.Folder == _loop.Path); StorePending(); }
+                _savedList = new List<RecordingInfo>();
+                SavedClips = 0; SavedBytes = 0;
+            }
+            FreeBytes = await GetFreeSpaceAsync(_loop);
+            UpdateTotals();
+            string text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "Deleted {0} recording{1} ({2:0.0} GB){3}{4}",
+                count, count == 1 ? "" : "s", bytes / 1073741824.0, includeSaved ? ", saved clips included" : ", saved clips kept",
+                failed > 0 ? " - " + failed + " could not be deleted (in use; try again)" : "");
+            Log(text);
+            return text;
         }
     }
 }

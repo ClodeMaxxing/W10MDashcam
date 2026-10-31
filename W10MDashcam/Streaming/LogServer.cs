@@ -90,7 +90,8 @@ namespace W10MDashcam.Streaming
         }
 
         /// <summary>A recording: the head, then the file in 256 KB pieces (never the whole file in memory).</summary>
-        private static async Task SendFileAsync(StreamSocket socket, FileReply file)
+        /// <remarks>Also used by the RTSP ports (USB), which answer plain HTTP requests too.</remarks>
+        internal static async Task SendFileAsync(StreamSocket socket, FileReply file)
         {
             if (file.Error != null)
             {
