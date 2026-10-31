@@ -92,6 +92,8 @@ button.save:hover:not(:disabled){background:#7a1818;box-shadow:0 0 8px rgba(255,
 <div class='vrow' style='margin-top:8px'><select id='rseg'></select><select id='rlim'></select></div>
 <div class='vrow' style='margin-top:6px'><select id='rimp'></select><label><input type='checkbox' id='rkn'> Save clip also keeps the next file</label></div>
 <div class='sub' id='rg' style='margin:4px 0 0'></div>
+<div class='sub' id='rgps' style='margin:4px 0 0'></div>
+<div class='vrow' style='margin-top:6px'><label><input type='checkbox' id='rgo'> GPS</label><select id='runits'></select><label><input type='checkbox' id='rsub'> Time, speed and position in recordings</label><i class='tip' data-tip='A subtitle track inside each recording: date and time, speed, position and IMPACT markers. VLC and most players show it over the video (Subtitle menu).'>i</i></div>
 <div class='vrow' style='margin-top:6px'><select id='rsl'></select><label><input type='checkbox' id='rrs'> Replace the oldest saved clips when full</label></div>
 <div class='vrow' style='margin-top:6px'><select id='rwhere'></select><i class='tip' data-tip='Where new recordings go. A folder of your own is chosen on the phone (Recording > Choose folder). The list below shows the current place only.'>i</i></div>
 <div class='btnrow' style='margin-top:6px'><button id='rref'>Refresh list</button><span class='sub' style='margin:0'>Tap a name to play it. Keep moves a recording to Saved (never deleted); Unlock gives it back to loop recording.</span></div>
@@ -303,7 +305,7 @@ $('ws').oninput=function(){touched=Date.now();labels();later('wb='+this.value)};
 function mb(b){return b>=1073741824?(b/1073741824).toFixed(1)+' GB':Math.max(1,Math.round(b/1048576))+' MB'}
 function hms(s){s=Math.floor(s||0);var m=Math.floor(s/60);s=s%60;return m+':'+(s<10?'0':'')+s}
 function esc(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;')}
-var segs=[1,3,5,10],lims=[4,8,16,32,64,0],slims=[2,4,8,16,32,0],imps={off:'Crash detection: off',low:'Crash detection: low (3 g)',medium:'Crash detection: medium (2 g)',high:'Crash detection: high (1.2 g)'},wheres={auto:'Save to: automatic (SD card if present)',phone:'Save to: phone storage',sd:'Save to: SD card',custom:'Save to: chosen folder'};
+var segs=[1,3,5,10],lims=[4,8,16,32,64,0],slims=[2,4,8,16,32,0],imps={off:'Crash detection: off',low:'Crash detection: low (2.5 g)',medium:'Crash detection: medium (1.6 g)',high:'Crash detection: high (1 g)'},wheres={auto:'Save to: automatic (SD card if present)',phone:'Save to: phone storage',sd:'Save to: SD card',custom:'Save to: chosen folder'};
 function recRender(){
  var r=st&&st.recording;if(!r)return;
  var on=r.state=='recording';
@@ -318,12 +320,19 @@ function recRender(){
  $('rg').textContent=r.impactAvailable?('G-sensor now '+r.gNow.toFixed(2)+' g, highest in 10 s '+r.gPeak.toFixed(2)+' g'+(r.lastImpact?' \u2013 last impact '+r.lastImpact:'')):'No G-sensor on this phone';
  $('rbtn').textContent=r.enabled?'Stop recording':'Start recording';$('rbtn').disabled=!st.canWrite;
  $('rsave').disabled=!st.canWrite||!on;
+ var g=r.gps||{};
+ $('rgps').innerHTML=!g.on?'GPS is off':g.fix?('GPS: '+(g.speed!=null?'<b>'+g.speed+' '+esc(g.unitText)+'</b> \u2013 ':'')+g.lat.toFixed(5)+', '+g.lon.toFixed(5)
+  +' (within '+g.accuracy+' m) <a style=color:#9cf0b0 target=_blank href=https://www.openstreetmap.org/?mlat='+g.lat+'&mlon='+g.lon+'#map=16/'+g.lat+'/'+g.lon+'>map</a>'):('GPS: '+esc(g.status||''));
  if(Date.now()-touched<2500)return;
  fill($('rseg'),segs,function(v){return 'New file every '+v+' min'});
  fill($('rlim'),lims,function(v){return v?'Keep up to '+v+' GB':'Use all free space'});
  fill($('rwhere'),['auto','phone','sd'].concat(r.customFolder?['custom']:[]),function(v){return wheres[v]});
  fill($('rimp'),['off','low','medium','high'],function(v){return imps[v]});
  fill($('rsl'),slims,function(v){return v?'Saved clips: up to '+v+' GB':'Saved clips: no space limit'});
+ var gp=r.gps||{};
+ fill($('runits'),['auto','kmh','mph'],function(v){return v=='auto'?'Speed: automatic ('+(gp.unitText||'')+')':v=='kmh'?'Speed: km/h':'Speed: mph'});
+ $('rgo').checked=!!gp.on;$('rsub').checked=!!gp.subtitles;$('runits').value=gp.units||'auto';
+ $('rgo').disabled=$('runits').disabled=$('rsub').disabled=!st.canWrite;
  $('rimp').value=r.impact;$('rsl').value=r.savedLimitGB;$('rkn').checked=r.keepNext;$('rrs').checked=r.replaceSaved;
  $('rimp').disabled=$('rsl').disabled=$('rkn').disabled=$('rrs').disabled=!st.canWrite;
  $('roo').checked=r.onOpen;$('rseg').value=r.segmentMin;$('rlim').value=r.limitGB;$('rwhere').value=r.mode;
@@ -355,6 +364,9 @@ $('rwhere').onchange=function(){touched=Date.now();send('location='+this.value);
 $('rseg').onchange=function(){touched=Date.now();send('segment='+this.value)};
 $('rlim').onchange=function(){touched=Date.now();send('storage='+(this.value=='0'?'all':this.value))};
 $('rimp').onchange=function(){touched=Date.now();send('impact='+this.value)};
+$('rgo').onchange=function(){touched=Date.now();send('gps='+(this.checked?'on':'off'))};
+$('runits').onchange=function(){touched=Date.now();send('units='+this.value)};
+$('rsub').onchange=function(){touched=Date.now();send('subtitles='+(this.checked?'on':'off'))};
 $('rkn').onchange=function(){touched=Date.now();send('keepnext='+(this.checked?'on':'off'))};
 $('rsl').onchange=function(){touched=Date.now();send('savedlimit='+(this.value=='0'?'none':this.value))};
 $('rrs').onchange=function(){touched=Date.now();send('replacesaved='+(this.checked?'on':'off'))};

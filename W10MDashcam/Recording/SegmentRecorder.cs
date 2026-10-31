@@ -131,6 +131,35 @@ namespace W10MDashcam.Recording
         /// or false + why nothing could be saved.
         /// </summary>
         public event Action<bool, string> ClipResult;
+
+        /// <summary>A subtitle track in every recording (date/time, speed, position): text for a moment (UTC).</summary>
+        public Func<DateTime, string> SubtitleText;
+        public volatile bool Subtitles = true;
+        private long _wallAnchor = long.MaxValue; // wall ticks (UTC) minus media time, from the least-delayed frame
+
+        /// <summary>One subtitle per second over the fragment's span, each with the text for its own moment.</summary>
+        private List<TextSample> MakeSubtitles(List<VideoFrame> frames, long nextTime)
+        {
+            var list = new List<TextSample>();
+            try
+            {
+                long start = frames[0].Time;
+                long end = nextTime > start ? nextTime : frames[frames.Count - 1].Time + Second / 30;
+                long anchor = _wallAnchor != long.MaxValue ? _wallAnchor : frames[0].Wall.Ticks - start;
+                // Cut at whole clock seconds, so the time shown changes exactly when the second does.
+                long t = start;
+                while (t < end)
+                {
+                    long wall = anchor + t;
+                    long nextSecond = (wall / Second + 1) * Second - anchor; // media time of the next whole second
+                    long until = Math.Min(end, Math.Max(t + 10000, nextSecond));
+                    list.Add(new TextSample { Time = t, Duration = until - t, Text = SubtitleText(new DateTime(wall, DateTimeKind.Utc)) });
+                    t = until;
+                }
+            }
+            catch { }
+            return list;
+        }
         private bool _cutRequested;      // Save clip: finish the current file at the next keyframe
         private string _clipText;        // what the pending clip keeps, for ClipResult
 
@@ -170,7 +199,7 @@ namespace W10MDashcam.Recording
                         _dropRun = 1;
                         return;
                     }
-                    _queue.Enqueue(new VideoFrame { Nals = nals, Time = time, Key = key, Bytes = bytes });
+                    _queue.Enqueue(new VideoFrame { Nals = nals, Time = time, Key = key, Bytes = bytes, Wall = DateTime.UtcNow });
                     _queuedBytes += bytes;
                 }
                 Wake();
@@ -279,6 +308,7 @@ namespace W10MDashcam.Recording
                     _lastVideoTime = -1;
                     break;
                 case Command c: await RunCommandAsync(c); break;
+                case ScanResult sr: OnScanResult(sr); break;
                 case ParamSets p:
                     bool changed = _sps != null && (!_sps.SequenceEqual(p.Sps) || !_pps.SequenceEqual(p.Pps));
                     _sps = p.Sps; _pps = p.Pps;
@@ -350,6 +380,11 @@ namespace W10MDashcam.Recording
             // A jump in the encoder clock means the stream restarted: start a new file.
             if (_lastVideoTime >= 0 && (f.Time <= _lastVideoTime || f.Time - _lastVideoTime > 3 * Second) && _seg != null)
                 await CloseAsync(-1);
+            // Clock for the subtitles: media time -> wall time, anchored on the frame that arrived with the least delay
+            // (arrival times bunch up at start-up and after a stall; the least-delayed frame is the truest).
+            if (_lastVideoTime < 0 || f.Time <= _lastVideoTime || f.Time - _lastVideoTime > 3 * Second) _wallAnchor = long.MaxValue;
+            long anchor = f.Wall.Ticks - f.Time;
+            if (anchor < _wallAnchor) _wallAnchor = anchor;
             _lastVideoTime = f.Time;
 
             if (_seg == null)
@@ -400,7 +435,7 @@ namespace W10MDashcam.Recording
 
             long t = _clock.ElapsedMilliseconds;
             long before = s.Writer.BytesWritten;
-            s.Writer.WriteFragment(s.Pending, audio, nextTime);
+            s.Writer.WriteFragment(s.Pending, audio, nextTime, s.Writer.HasText ? MakeSubtitles(s.Pending, nextTime) : null);
             s.Pending.Clear();
             long ms = _clock.ElapsedMilliseconds - t;
             if (ms > MaxWriteMs) MaxWriteMs = ms;
@@ -430,6 +465,7 @@ namespace W10MDashcam.Recording
                 var writer = a != null && a.Config != null
                     ? new FragmentedMp4Writer(stream, _sps, _pps, firstTime, a.Config, a.SampleRate, a.Channels)
                     : new FragmentedMp4Writer(stream, _sps, _pps, firstTime);
+                writer.HasText = Subtitles && SubtitleText != null;
                 writer.WriteHeader();
                 _seg = new Segment { File = file, Stream = stream, Writer = writer, Name = file.Name, Start = firstTime };
                 if (_carryAudio != null && writer.HasAudio) _seg.Audio.AddRange(_carryAudio.Where(x => x.Time >= firstTime));
@@ -792,21 +828,76 @@ namespace W10MDashcam.Recording
             _saved = await root.CreateFolderAsync("Saved", CreationCollisionOption.OpenIfExists);
             _segments.Clear();
             LoadPending();
-            foreach (var f in (await ListMp4Async(_loop)).Where(x => OwnName.IsMatch(x.Name)).OrderBy(x => x.Name))
-            {
-                if (_seg != null && f.Name == _seg.Name) continue;
-                if (IsPending(f.Name)) continue; // a saved clip waiting to be moved: never loop-deleted
-                var p = await f.GetBasicPropertiesAsync();
-                _segments.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
-            }
-            if (!_lastClosedKnown) { _lastClosedKnown = true; _lastClosed = _segments.LastOrDefault()?.Name; }
-            SavedClips = (await ListMp4Async(_saved)).Count;
             _root = root;
-            if (Location != where) Log("Recordings: " + where + ", " + _segments.Count + " loop files, " + SavedClips + " saved");
+            if (Location != where) Log("Recordings: " + where);
             Location = where;
             UpdateTotals();
-            FreeBytes = await GetFreeSpaceAsync(_root);
+
+            // Listing the existing files takes seconds in a big library folder: do it in the background so the
+            // first file can start at once. Loop deletion waits for the list (HousekeepAsync checks _scanning).
+            int gen = ++_scanGen;
+            _scanning = true;
+            StorageFolder loop = _loop, saved = _saved;
+            var _ = Task.Run(async () =>
+            {
+                var sw = Stopwatch.StartNew();
+                var result = new ScanResult { Gen = gen };
+                try
+                {
+                    foreach (var f in (await ListMp4Async(loop)).Where(x => OwnName.IsMatch(x.Name)).OrderBy(x => x.Name))
+                    {
+                        var p = await f.GetBasicPropertiesAsync();
+                        result.Loop.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
+                    }
+                    result.Saved = (await ListMp4Async(saved)).Count;
+                    result.Free = await GetFreeSpaceAsync(loop);
+                }
+                catch (Exception ex) { result.Error = ex.Message; }
+                result.Seconds = sw.Elapsed.TotalSeconds;
+                Enqueue(result, 0);
+            });
         }
+
+        private sealed class ScanResult
+        {
+            public int Gen;
+            public readonly List<RecordingInfo> Loop = new List<RecordingInfo>();
+            public int Saved;
+            public long Free = -1;
+            public double Seconds;
+            public string Error;
+        }
+        private int _scanGen;
+        private bool _scanning;
+
+        /// <summary>The background folder scan finished: merge with what this session has recorded meanwhile.</summary>
+        private void OnScanResult(ScanResult r)
+        {
+            if (r.Gen != _scanGen) return; // the folder changed since
+            _scanning = false;
+            if (r.Error != null) { Log("Recordings: listing the folder failed: " + r.Error); _root = null; return; }
+            var known = new HashSet<string>(_segments.Select(x => x.Name));
+            foreach (var f in r.Loop)
+            {
+                if (known.Contains(f.Name) || (_seg != null && f.Name == _seg.Name) || IsPending(f.Name)) continue;
+                _segments.Add(f);
+            }
+            _segments.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+            if (!_lastClosedKnown)
+            {
+                _lastClosedKnown = true;
+                _lastClosed = r.Loop.Where(x => _seg == null || x.Name != _seg.Name).Select(x => x.Name).LastOrDefault();
+            }
+            SavedClips = r.Saved;
+            if (r.Free >= 0) FreeBytes = r.Free;
+            UpdateTotals();
+            Log(string.Format(System.Globalization.CultureInfo.InvariantCulture, "Recordings: {0} loop files, {1} saved (listed in {2:0.0} s, in the background)",
+                _segments.Count, SavedClips, r.Seconds));
+            _nextHousekeep = DateTime.UtcNow; // apply the limits now that the list is complete
+        }
+
+        /// <summary>Find the recordings folder and list it now (at app start, before the camera is ready).</summary>
+        public void Prepare() => Enqueue(new Command { What = Cmd.Housekeep }, 0);
 
         private void UpdateTotals()
         {
@@ -817,6 +908,7 @@ namespace W10MDashcam.Recording
         /// <summary>Loop recording: delete the oldest files while over the limit or short of free space.</summary>
         private async Task HousekeepAsync()
         {
+            if (_scanning) { _nextHousekeep = DateTime.UtcNow.AddSeconds(5); return; } // the file list is not complete yet
             _nextHousekeep = DateTime.UtcNow.AddSeconds(60);
             FreeBytes = await GetFreeSpaceAsync(_root);
             long current = _seg?.Writer.BytesWritten ?? 0;

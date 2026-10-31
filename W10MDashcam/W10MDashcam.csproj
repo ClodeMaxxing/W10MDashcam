@@ -90,6 +90,10 @@
     <Compile Include="Recording\FragmentedMp4Writer.cs" />
     <Compile Include="Recording\SegmentRecorder.cs" />
     <Compile Include="Recording\ImpactDetector.cs" />
+    <Compile Include="Recording\GpsTracker.cs" />
+    <Compile Include="MainPage.Gps.cs">
+      <DependentUpon>MainPage.xaml</DependentUpon>
+    </Compile>
     <Compile Include="MainPage.Safety.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>

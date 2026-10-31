@@ -21,6 +21,7 @@ namespace W10MDashcam
         private static readonly int[] SavedLimitOptions = { 2, 4, 8, 16, 32, 0 }; // 0 = no limit
         private bool _loadingSafetyUi = true;
         private string _lastWarning = "";
+        private DateTime _lastTouch = DateTime.MinValue; // set by AnyTouch (MainPage.xaml.cs)
 
         private int SavedLimitGb => _recorder.SavedLimitBytes == long.MaxValue ? 0 : (int)(_recorder.SavedLimitBytes >> 30);
 
@@ -36,9 +37,9 @@ namespace W10MDashcam
             _recorder.ReplaceOldSaved = _settings.Values["RecReplaceSaved"] is bool rs && rs;
 
             ImpactBox.Items.Add(new ChoiceOption { Value = 0, Text = "Off" });
-            ImpactBox.Items.Add(new ChoiceOption { Value = 1, Text = "Low - big impacts only (3 g)" });
-            ImpactBox.Items.Add(new ChoiceOption { Value = 2, Text = "Medium (2 g)" });
-            ImpactBox.Items.Add(new ChoiceOption { Value = 3, Text = "High - also hard bumps (1.2 g)" });
+            ImpactBox.Items.Add(new ChoiceOption { Value = 1, Text = "Low - big impacts only (2.5 g)" });
+            ImpactBox.Items.Add(new ChoiceOption { Value = 2, Text = "Medium (1.6 g)" });
+            ImpactBox.Items.Add(new ChoiceOption { Value = 3, Text = "High - also hard knocks (1 g)" });
             foreach (var g in SavedLimitOptions) SavedLimitBox.Items.Add(new ChoiceOption { Value = g, Text = g == 0 ? "No limit" : g + " GB" });
             SelectChoice(ImpactBox, Array.IndexOf(ImpactLevels, _impactSens));
             SelectChoice(SavedLimitBox, SavedLimitGb);
@@ -48,12 +49,21 @@ namespace W10MDashcam
 
             _impact.Log = Log;
             _impact.Impact += g => { var _ = Dispatcher.RunAsync(CoreDispatcherPriority.High, () => OnImpact(g)); };
+            _impact.NearMiss += g => Log("G-sensor: jolt " + g.ToString("0.00", CultureInfo.InvariantCulture) + " g (saves at "
+                + _impact.Threshold.ToString("0.0", CultureInfo.InvariantCulture) + " g)");
             _impact.Start();
+            LoadGpsSettings();
+            _recorder.Prepare(); // find and list the recordings folder now, before the camera is ready
         }
 
         private void OnImpact(double g)
         {
             string gs = g.ToString("0.0", CultureInfo.InvariantCulture) + " g";
+            if ((DateTime.Now - _lastTouch).TotalSeconds < 2)
+            {
+                Log("G-sensor: " + gs + " while the screen was being touched - taken as handling the phone, not saved");
+                return;
+            }
             if (_recorder.State != "recording")
             {
                 Log("IMPACT detected (" + gs + ") - not recording, nothing saved");
@@ -122,6 +132,7 @@ namespace W10MDashcam
             string w = _recorder.Warning ?? "";
             if (w.Length > 0 && w != _lastWarning) { Log("Storage warning: " + w); PlayChime(false); }
             _lastWarning = w;
+            UpdateGpsUi();
         }
 
         // ---------------------------------------------------------------- web / USB config
@@ -129,6 +140,7 @@ namespace W10MDashcam
         /// <summary>impact=off|low|medium|high, keepnext=on|off, savedlimit=GB|none, replacesaved=on|off. Network thread.</summary>
         private async Task ApplySafetyConfigAsync(IDictionary<string, string> form, List<string> done)
         {
+            await ApplyGpsConfigAsync(form, done);
             bool ui = false;
             if (form.TryGetValue("impact", out var im))
             {
@@ -168,9 +180,10 @@ namespace W10MDashcam
         }
 
         private string SafetyConfigText() =>
-            "impact=" + _impactSens + " (crash detection; low 3 g, medium 2 g, high 1.2 g)\n" +
+            "impact=" + _impactSens + " (crash detection; low 2.5 g, medium 1.6 g, high 1 g)\n" +
             "keepnext=" + (_recorder.KeepNextFile ? "on" : "off") + " (Save clip also keeps the next file; impacts always do)\n" +
-            "savedlimit=" + (SavedLimitGb == 0 ? "none" : SavedLimitGb.ToString()) + " (GB for saved clips), replacesaved=" + (_recorder.ReplaceOldSaved ? "on" : "off") + "\n";
+            "savedlimit=" + (SavedLimitGb == 0 ? "none" : SavedLimitGb.ToString()) + " (GB for saved clips), replacesaved=" + (_recorder.ReplaceOldSaved ? "on" : "off") + "\n" +
+            GpsConfigText();
 
         private void AddSafetyJson(JsonObject j)
         {
@@ -185,6 +198,7 @@ namespace W10MDashcam
             j["savedLimitGB"] = JsonValue.CreateNumberValue(SavedLimitGb);
             j["replaceSaved"] = JsonValue.CreateBooleanValue(_recorder.ReplaceOldSaved);
             j["warning"] = JsonValue.CreateStringValue(_recorder.Warning ?? "");
+            AddGpsJson(j);
         }
     }
 }

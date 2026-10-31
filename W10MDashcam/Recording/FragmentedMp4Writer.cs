@@ -12,6 +12,15 @@ namespace W10MDashcam.Recording
         public long Time;
         public bool Key;
         public int Bytes;
+        public DateTime Wall;   // when it arrived (UTC): the subtitles' clock
+    }
+
+    /// <summary>One subtitle (timed text) sample: shown from Time for Duration (both 100 ns units).</summary>
+    internal sealed class TextSample
+    {
+        public long Time;
+        public long Duration;
+        public string Text;
     }
 
     /// <summary>One raw AAC frame (1024 samples) and its time in 100 ns units.</summary>
@@ -30,7 +39,8 @@ namespace W10MDashcam.Recording
     /// </summary>
     internal sealed class FragmentedMp4Writer
     {
-        private const int VideoTrack = 1, AudioTrack = 2;
+        private const int VideoTrack = 1, AudioTrack = 2, TextTrack = 3;
+        private const int TextTimescale = 1000;
         private const int VideoTimescale = 90000;
         private const int MovieTimescale = 1000;
         private const int AacFrameSamples = 1024;
@@ -51,6 +61,9 @@ namespace W10MDashcam.Recording
         /// <summary>Video duration written so far, in 100 ns units.</summary>
         public long Duration => _videoEnd * 10000000L / VideoTimescale;
         public bool HasAudio => _audioConfig != null;
+        /// <summary>A timed-text (subtitle) track: date/time, speed, position. Set before WriteHeader.</summary>
+        public bool HasText { get; set; }
+        private long _textNext;               // text decode time (ms) where the next sample goes
 
         public FragmentedMp4Writer(Stream output, byte[] sps, byte[] pps, long firstFrameTime,
                                    byte[] audioConfig = null, int audioRate = 0, int audioChannels = 0)
@@ -86,6 +99,7 @@ namespace W10MDashcam.Recording
             WriteMvhd(b);
             WriteVideoTrak(b);
             if (HasAudio) WriteAudioTrak(b);
+            if (HasText) WriteTextTrak(b);
             b.Begin("mvex");
             // Room for an 'mehd' (total duration). It stays a 'free' box unless Close() fills it in,
             // so a file cut off mid-recording is still valid.
@@ -93,6 +107,7 @@ namespace W10MDashcam.Recording
             b.Begin("free"); b.U32(0); b.U64(0); b.End(); // 20 bytes = same size as mehd version 1
             WriteTrex(b, VideoTrack);
             if (HasAudio) WriteTrex(b, AudioTrack);
+            if (HasText) WriteTrex(b, TextTrack);
             b.End(); // mvex
             b.End(); // moov
 
@@ -104,7 +119,7 @@ namespace W10MDashcam.Recording
         /// Writes one fragment: video frames (the first should be a keyframe), the audio that belongs to the same time span,
         /// and the time (100 ns) of the frame that follows the last one (used for the last frame's duration; -1 if unknown).
         /// </summary>
-        public void WriteFragment(IList<VideoFrame> frames, IList<AudioSample> audio, long nextFrameTime)
+        public void WriteFragment(IList<VideoFrame> frames, IList<AudioSample> audio, long nextFrameTime, IList<TextSample> text = null)
         {
             if (frames.Count == 0) return;
             int n = frames.Count;
@@ -161,6 +176,31 @@ namespace W10MDashcam.Recording
             m.End(); // trun
             m.End(); // traf
 
+            // timed text: samples back to back from where the last fragment's text ended
+            int tn = HasText && text != null ? text.Count : 0;
+            var textData = new List<byte[]>();
+            var textDur = new List<uint>();
+            long textBase = 0;
+            int textBytes = 0;
+            if (tn > 0)
+            {
+                textBase = Math.Max(_textNext, Math.Max(0, (text[0].Time - _t0) / 10000));
+                long t = textBase;
+                foreach (var ts in text)
+                {
+                    long end = Math.Max(t + 1, (ts.Time + ts.Duration - _t0) / 10000);
+                    var utf = Encoding.UTF8.GetBytes(ts.Text ?? "");
+                    var d = new byte[2 + utf.Length];
+                    d[0] = (byte)(utf.Length >> 8); d[1] = (byte)utf.Length;
+                    Buffer.BlockCopy(utf, 0, d, 2, utf.Length);
+                    textData.Add(d);
+                    textDur.Add((uint)(end - t));
+                    textBytes += d.Length;
+                    t = end;
+                }
+                _textNext = t;
+            }
+
             int audioOffsetPos = -1;
             if (an > 0)
             {
@@ -175,19 +215,34 @@ namespace W10MDashcam.Recording
                 m.End();
                 _audioNext = audioBase + (long)an * AacFrameSamples;
             }
+            int textOffsetPos = -1;
+            if (tn > 0)
+            {
+                m.Begin("traf");
+                m.FullBox("tfhd", 0, 0x020000); m.U32(TextTrack); m.End();
+                m.FullBox("tfdt", 1, 0); m.U64((ulong)textBase); m.End();
+                m.FullBox("trun", 0, 0x000001 | 0x000100 | 0x000200);
+                m.U32((uint)tn);
+                textOffsetPos = m.Length; m.U32(0);
+                for (int i = 0; i < tn; i++) { m.U32(textDur[i]); m.U32((uint)textData[i].Length); }
+                m.End();
+                m.End();
+            }
             m.End(); // moof
 
             int moofSize = m.Length;
             m.Patch32(videoOffsetPos, (uint)(moofSize + 8));
             if (audioOffsetPos >= 0) m.Patch32(audioOffsetPos, (uint)(moofSize + 8 + videoBytes));
+            if (textOffsetPos >= 0) m.Patch32(textOffsetPos, (uint)(moofSize + 8 + videoBytes + audioBytes));
 
             // mdat: header, then the samples (written straight into the same buffer: one write per fragment)
-            long mdatSize = 8L + videoBytes + audioBytes;
+            long mdatSize = 8L + videoBytes + audioBytes + textBytes;
             m.U32((uint)mdatSize); m.Fourcc("mdat");
             for (int i = 0; i < n; i++)
                 foreach (var nal in frames[i].Nals)
                     if (KeepNal(nal)) { m.U32((uint)nal.Length); m.Bytes(nal); }
             if (an > 0) foreach (var a in audio) m.Bytes(a.Data);
+            foreach (var d in textData) m.Bytes(d);
 
             Emit(m);
             _videoEnd = dts[n];
@@ -236,7 +291,7 @@ namespace W10MDashcam.Recording
             b.Zeros(10);
             WriteMatrix(b);
             b.Zeros(24);                        // pre_defined
-            b.U32(HasAudio ? 3u : 2u);          // next_track_ID
+            b.U32(HasText ? 4u : HasAudio ? 3u : 2u); // next_track_ID
             b.End();
         }
 
@@ -370,6 +425,47 @@ namespace W10MDashcam.Recording
             b.U8(0x06); b.U8(1); b.U8(2);
             b.End(); // esds
             b.End(); // mp4a
+            b.End(); // stsd
+            WriteEmptyTables(b);
+            b.End();
+            b.End();
+            b.End();
+            b.End();
+        }
+
+        /// <summary>3GPP timed text (tx3g), shown by VLC, ffmpeg-based and most desktop players as a subtitle track.</summary>
+        private void WriteTextTrak(Box b)
+        {
+            b.Begin("trak");
+            b.FullBox("tkhd", 0, 3);            // enabled, in movie: shown by default where the player allows
+            b.U32(0); b.U32(0);
+            b.U32(TextTrack); b.U32(0);
+            b.U32(0);
+            b.Zeros(8);
+            b.U16(0xFFFF); b.U16(0);            // layer -1 (in front of the video), alternate group
+            b.U16(0); b.U16(0);
+            WriteMatrix(b);
+            b.U32((uint)_width << 16);
+            b.U32((uint)_height << 16);
+            b.End();
+            b.Begin("mdia");
+            WriteMdhd(b, TextTimescale);
+            WriteHdlr(b, "sbtl", "SubtitleHandler");
+            b.Begin("minf");
+            b.FullBox("nmhd", 0, 0); b.End();
+            WriteDinf(b);
+            b.Begin("stbl");
+            b.FullBox("stsd", 0, 0); b.U32(1);
+            b.Begin("tx3g");
+            b.Zeros(6); b.U16(1);               // data_reference_index
+            b.U32(0);                           // display flags
+            b.U8(0); b.U8(0xFF);                // left aligned, bottom
+            b.U8(0); b.U8(0); b.U8(0); b.U8(0x80); // background: half-transparent black
+            b.U16(0); b.U16(0); b.U16(0); b.U16(0); // default text box (player decides)
+            b.U16(0); b.U16(0); b.U16(1); b.U8(0); b.U8(18); // style: chars 0-0, font 1, plain, 18
+            b.U8(0xFF); b.U8(0xFF); b.U8(0xFF); b.U8(0xFF);  // white
+            b.Begin("ftab"); b.U16(1); b.U16(1); b.U8(10); b.Bytes(Encoding.ASCII.GetBytes("Sans-Serif")); b.End();
+            b.End(); // tx3g
             b.End(); // stsd
             WriteEmptyTables(b);
             b.End();

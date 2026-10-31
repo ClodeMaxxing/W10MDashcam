@@ -624,6 +624,7 @@ namespace W10MDashcam
 
         private void AnyTouch(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
+            _lastTouch = DateTime.Now;
             if (_blackedOut && BlackoutOverlay.Visibility != Visibility.Visible) { _wakeTimer.Stop(); _wakeTimer.Start(); }
             if (_phoneAdjusting) { _adjustTimer.Stop(); _adjustTimer.Start(); }
         }

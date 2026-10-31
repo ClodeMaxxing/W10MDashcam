@@ -95,6 +95,7 @@ namespace W10MDashcam
         {
             _recorder.Enabled = RecordOnOpen && !crashedLastTime;
             SetLive(LiveOnOpen && !crashedLastTime);
+            if (_gpsOn && !_gps.Running) { var _ = _gps.StartAsync(); } // e.g. location was just allowed in Settings
         }
 
         // ---------------------------------------------------------------- record / live
@@ -457,7 +458,7 @@ namespace W10MDashcam
             "storage=" + (LimitGb == 0 ? "all" : LimitGb.ToString()) + " (GB the loop recordings may use; all = all free space but 1 GB)\n" +
             SafetyConfigText();
 
-        private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=GB|all, saveclip=1, impact=off|low|medium|high, keepnext=on|off, savedlimit=GB|none, replacesaved=on|off";
+        private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=GB|all, saveclip=1, impact=off|low|medium|high, keepnext=on|off, savedlimit=GB|none, replacesaved=on|off, gps=on|off, units=auto|kmh|mph, subtitles=on|off";
 
         private void AddRecordingJson(JsonObject o)
         {

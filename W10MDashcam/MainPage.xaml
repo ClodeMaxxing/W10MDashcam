@@ -229,6 +229,10 @@
                     <ToggleSwitch x:Name="KeepNextToggle" Header="Save clip also keeps the next file" IsOn="True" Toggled="KeepNextToggle_Toggled" />
                     <ComboBox x:Name="SavedLimitBox" Header="Space for saved clips" SelectionChanged="SavedLimitBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
                     <ToggleSwitch x:Name="ReplaceSavedToggle" Header="Replace the oldest saved clips when full" IsOn="False" Toggled="ReplaceSavedToggle_Toggled" />
+                    <ToggleSwitch x:Name="GpsToggle" Header="GPS speed and position" IsOn="True" Toggled="GpsToggle_Toggled" />
+                    <TextBlock x:Name="GpsText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,-4,0,4" />
+                    <ComboBox x:Name="UnitsBox" Header="Speed in" SelectionChanged="UnitsBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
+                    <ToggleSwitch x:Name="SubtitlesToggle" Header="Date, time, speed and position in recordings (subtitles)" IsOn="True" Toggled="SubtitlesToggle_Toggled" />
                     <TextBlock Text="The oldest files are deleted to stay within this space. Saved clips (the current and the previous file) are never deleted, and files the app did not record are never touched. The camera button saves a clip too. Recordings: on the web page at /camera." FontSize="11" Foreground="#7F9A86" TextWrapping="Wrap" Margin="0,0,0,6" />
                 </StackPanel>
 
