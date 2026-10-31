@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Networking.Sockets;
 using Windows.Storage.Streams;
@@ -11,8 +12,19 @@ namespace W10MDashcam.Streaming
     /// <summary>Tiny HTTP server on http://PHONE-IP:5001 - the log, /status, /snapshot.jpg (see HttpApi).</summary>
     internal sealed class LogServer
     {
+        private const int MaxConnections = 16;      // more at once get a quick 503
+        private const int MaxBodyBytes = 64 * 1024;
+        private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(10);  // the whole request
+        private static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(30); // one write without progress
+
         private readonly HttpApi _api;
         private StreamSocketListener _listener;
+        private int _active;
+        private DateTime _lastErrorLog = DateTime.MinValue;
+        private int _quietErrors;
+        private readonly object _logLock = new object();
+
+        public Action<string> Log = _ => { };
 
         public LogServer(HttpApi api) { _api = api; }
 
@@ -32,33 +44,52 @@ namespace W10MDashcam.Streaming
 
         private async void OnConnection(StreamSocketListener sender, StreamSocketListenerConnectionReceivedEventArgs args)
         {
+            int active = Interlocked.Increment(ref _active);
             try
             {
                 using (var socket = args.Socket)
                 {
+                    if (active > MaxConnections)
+                    {
+                        try
+                        {
+                            using (var busy = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                                await socket.OutputStream.WriteAsync(HttpApi.Reply(503, "Service Unavailable", "text/plain", "Busy, try again\n").AsBuffer()).AsTask(busy.Token);
+                        }
+                        catch { }
+                        return;
+                    }
                     var reader = new DataReader(socket.InputStream) { InputStreamOptions = InputStreamOptions.Partial };
                     var data = new List<byte>();
                     int headerEnd = -1, bodyLen = 0;
-                    var deadline = DateTime.UtcNow.AddSeconds(10);
-                    while (DateTime.UtcNow < deadline)
+                    using (var cts = new CancellationTokenSource(ReadTimeout))
                     {
-                        uint got = await reader.LoadAsync(4096);
-                        if (got == 0) break;
-                        var chunk = new byte[got];
-                        reader.ReadBytes(chunk);
-                        data.AddRange(chunk);
-                        if (headerEnd < 0)
+                        while (true)
                         {
-                            string s = Encoding.ASCII.GetString(data.ToArray());
-                            headerEnd = s.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-                            if (headerEnd >= 0)
+                            uint got;
+                            try { got = await reader.LoadAsync(4096).AsTask(cts.Token); } // a slow client is cut off after 10 s
+                            catch (OperationCanceledException)
                             {
-                                var m = System.Text.RegularExpressions.Regex.Match(s.Substring(0, headerEnd), @"(?im)^Content-Length:\s*(\d+)");
-                                if (m.Success) bodyLen = int.Parse(m.Groups[1].Value);
+                                if (data.Count == 0) return; // an unused connection (browsers open spare ones): not worth a log line
+                                throw new TimeoutException("request not complete within " + (int)ReadTimeout.TotalSeconds + " s");
                             }
+                            if (got == 0) break;
+                            var chunk = new byte[got];
+                            reader.ReadBytes(chunk);
+                            data.AddRange(chunk);
+                            if (headerEnd < 0)
+                            {
+                                string s = Encoding.ASCII.GetString(data.ToArray());
+                                headerEnd = s.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                                if (headerEnd >= 0)
+                                {
+                                    var m = System.Text.RegularExpressions.Regex.Match(s.Substring(0, headerEnd), @"(?im)^Content-Length:\s*(\d+)");
+                                    if (m.Success && (!int.TryParse(m.Groups[1].Value, out bodyLen) || bodyLen > MaxBodyBytes)) return;
+                                }
+                            }
+                            if (headerEnd >= 0 && data.Count >= headerEnd + 4 + bodyLen) break;
+                            if (data.Count > 256 * 1024) break;
                         }
-                        if (headerEnd >= 0 && data.Count >= headerEnd + 4 + bodyLen) break;
-                        if (data.Count > 256 * 1024) break;
                     }
                     reader.DetachStream();
                     if (headerEnd < 0) return;
@@ -82,11 +113,12 @@ namespace W10MDashcam.Streaming
                         return;
                     }
                     byte[] reply = await _api.HandleAsync(request);
-                    await socket.OutputStream.WriteAsync(reply.AsBuffer());
+                    await WriteAsync(socket, reply, 0, reply.Length);
                     await socket.OutputStream.FlushAsync();
                 }
             }
-            catch { }
+            catch (Exception ex) { LogError(ex); }
+            finally { Interlocked.Decrement(ref _active); }
         }
 
         /// <summary>A recording: the head, then the file in 256 KB pieces (never the whole file in memory).</summary>
@@ -95,24 +127,50 @@ namespace W10MDashcam.Streaming
         {
             if (file.Error != null)
             {
-                await socket.OutputStream.WriteAsync(file.Error.AsBuffer());
+                await WriteAsync(socket, file.Error, 0, file.Error.Length);
                 await socket.OutputStream.FlushAsync();
                 return;
             }
             using (var body = file.Body)
             {
-                await socket.OutputStream.WriteAsync(file.Head.AsBuffer());
+                await WriteAsync(socket, file.Head, 0, file.Head.Length);
                 var buf = new byte[256 * 1024];
                 long left = file.Length;
                 while (left > 0)
                 {
                     int n = await body.ReadAsync(buf, 0, (int)Math.Min(buf.Length, left));
                     if (n <= 0) break;
-                    await socket.OutputStream.WriteAsync(buf.AsBuffer(0, n));
+                    await WriteAsync(socket, buf, 0, n);
                     left -= n;
                 }
                 await socket.OutputStream.FlushAsync();
             }
+        }
+
+        /// <summary>One write; a viewer that takes nothing for 30 s (paused player, dead connection) is cut off.</summary>
+        private static async Task WriteAsync(StreamSocket socket, byte[] data, int offset, int count)
+        {
+            using (var cts = new CancellationTokenSource(WriteTimeout))
+            {
+                try { await socket.OutputStream.WriteAsync(data.AsBuffer(offset, count)).AsTask(cts.Token); }
+                catch (OperationCanceledException) { throw new TimeoutException("the client took nothing for " + (int)WriteTimeout.TotalSeconds + " s"); }
+            }
+        }
+
+        /// <summary>At most one line per 30 s, so a client that keeps failing cannot flood the log.</summary>
+        private void LogError(Exception ex)
+        {
+            string line;
+            lock (_logLock)
+            {
+                var now = DateTime.UtcNow;
+                if ((now - _lastErrorLog).TotalSeconds < 30) { _quietErrors++; return; }
+                line = "Web port: request failed (" + ex.Message + ")" +
+                       (_quietErrors > 0 ? " - " + _quietErrors + " more since the last message" : "");
+                _lastErrorLog = now;
+                _quietErrors = 0;
+            }
+            Log(line);
         }
     }
 }
