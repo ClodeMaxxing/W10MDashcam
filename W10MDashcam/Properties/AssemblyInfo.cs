@@ -4,6 +4,6 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("W10MDashcam")]
 [assembly: AssemblyDescription("Windows 10 Mobile dashcam")]
 [assembly: AssemblyProduct("W10MDashcam")]
-[assembly: AssemblyVersion("0.5.3.0")]
-[assembly: AssemblyFileVersion("0.5.3.0")]
+[assembly: AssemblyVersion("0.5.4.0")]
+[assembly: AssemblyFileVersion("0.5.4.0")]
 [assembly: ComVisible(false)]
