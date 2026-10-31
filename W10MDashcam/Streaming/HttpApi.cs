@@ -77,7 +77,7 @@ namespace W10MDashcam.Streaming
                 if (path == "/camera" || path == "/camera/state" || path == "/camera/set")
                     return await HandleCameraAsync(r, path);
 
-                if (path == "/recordings" || path == "/recordings/save" || path == "/recordings/delete")
+                if (path == "/recordings" || path == "/recordings/save" || path == "/recordings/delete" || path == "/recordings/lock" || path == "/recordings/unlock")
                     return await HandleRecordingsAsync(r, path);
 
                 if (path == "/config")
@@ -126,7 +126,7 @@ namespace W10MDashcam.Streaming
                     return Reply(403, "Forbidden", "text/plain", "Use the settings page (missing X-Requested-With header)\n");
                 var all = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip", "recordonopen", "live", "liveonopen", "location" })
+                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved" })
                     if (all.TryGetValue(k, out var v)) only[k] = v;
                 string bad = CheckLoginFields(only);
                 if (bad != null) result = bad;
@@ -156,7 +156,8 @@ namespace W10MDashcam.Streaming
                     if (!first) sb.Append(',');
                     first = false;
                     sb.Append("{\"name\":\"").Append(Esc(f.Name)).Append("\",\"size\":").Append(f.Size)
-                      .Append(",\"saved\":").Append(f.Saved ? "true" : "false").Append(",\"recording\":").Append(f.Recording ? "true" : "false").Append('}');
+                      .Append(",\"saved\":").Append(f.Saved ? "true" : "false").Append(",\"recording\":").Append(f.Recording ? "true" : "false")
+                      .Append(",\"note\":\"").Append(Esc(f.Note)).Append("\"}");
                 }
                 sb.Append("]}");
                 return Reply(200, "OK", "application/json", sb.ToString(), "Cache-Control: no-store\r\n");
@@ -172,6 +173,9 @@ namespace W10MDashcam.Streaming
                 return Reply(200, "OK", "text/plain", "Saving the clip\n");
             }
             var form = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
+            string fname = form.TryGetValue("name", out var fn) ? fn : "";
+            if (path == "/recordings/lock") { Recorder.Lock(fname); return Reply(200, "OK", "text/plain", "Keeping " + fname + "\n"); }
+            if (path == "/recordings/unlock") { Recorder.Unlock(fname); return Reply(200, "OK", "text/plain", "Unlocking " + fname + "\n"); }
             string err = await Recorder.DeleteAsync(form.TryGetValue("name", out var n) ? n : "", form.TryGetValue("saved", out var sv) && sv == "1");
             return err == null ? Reply(200, "OK", "text/plain", "Deleted\n") : Reply(400, "Bad Request", "text/plain", err + "\n");
         }

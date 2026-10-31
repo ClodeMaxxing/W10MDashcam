@@ -19,6 +19,7 @@ namespace W10MDashcam.Recording
         public long Size;
         public bool Saved;
         public bool Recording; // the file being written right now
+        public string Note;    // why a saved clip was kept ("impact 2.4 g", "button", "locked"...)
     }
 
     /// <summary>
@@ -44,6 +45,11 @@ namespace W10MDashcam.Recording
         public long LimitBytes = 16L << 30;
         /// <summary>Always leave this much free on the storage.</summary>
         public long MinFreeBytes = 1L << 30;
+        /// <summary>Save clip also keeps the file after the press (the moments after). Impacts always do.</summary>
+        public volatile bool KeepNextFile = true;
+        /// <summary>Space for saved clips; above it: a warning, or (ReplaceOldSaved) the oldest saved clips are deleted.</summary>
+        public long SavedLimitBytes = 8L << 30;
+        public volatile bool ReplaceOldSaved = false;
         /// <summary>Where to record: "auto" (SD card if present, else phone), "phone", "sd", or "custom" (the picked folder).</summary>
         public volatile string StorageMode = "auto";
         /// <summary>Key of the picked folder in the app's future-access list.</summary>
@@ -51,7 +57,7 @@ namespace W10MDashcam.Recording
         /// <summary>The picked folder's path, for display (empty until one is picked).</summary>
         public string CustomFolderPath { get; private set; } = "";
 
-        private const long MaxQueueBytes = 48L << 20;     // ~16 s at 24 Mbps; ~100 s at 4 Mbps
+        private const long MaxQueueBytes = 96L << 20;     // ~30 s at 24 Mbps: rides out slow storage / broker calls
         private const long Second = 10000000L;            // 100 ns units
         private const long MaxFragment = 2 * Second;      // a fragment is written at least this often
         private static readonly Regex SafeName = new Regex(@"^[0-9A-Za-z_\-\. ()]{1,80}\.mp4$");
@@ -68,9 +74,11 @@ namespace W10MDashcam.Recording
         private Task _worker;
 
         private sealed class ParamSets { public byte[] Sps, Pps; }
+        private sealed class DropMark { public long Frames; }   // frames were dropped (the writer fell behind)
+        private long _dropRun;
         private sealed class AudioFormatItem { public AudioFormat Format; }
-        private enum Cmd { End, Save, Shutdown, Housekeep, Relocate }
-        private sealed class Command { public Cmd What; public TaskCompletionSource<bool> Done; }
+        private enum Cmd { End, Save, Shutdown, Housekeep, Rescan, Relocate, Lock, Unlock }
+        private sealed class Command { public Cmd What; public TaskCompletionSource<bool> Done; public string Reason, Name; public bool KeepNext; }
 
         // ---- worker state
         private byte[] _sps, _pps;
@@ -95,6 +103,7 @@ namespace W10MDashcam.Recording
             public string Name;
             public long Start;
             public bool Protect;
+            public string Note;
             public readonly List<VideoFrame> Pending = new List<VideoFrame>();
             public readonly List<AudioSample> Audio = new List<AudioSample>();
         }
@@ -112,6 +121,11 @@ namespace W10MDashcam.Recording
         public long MaxWriteMs { get; private set; }
         public int SavedClips { get; private set; }
         public string LastError { get; private set; } = "";
+        public long SavedBytes { get; private set; }
+        /// <summary>Saved clips use more than their space (and are not being replaced).</summary>
+        public bool SavedFull { get; private set; }
+        /// <summary>A storage warning to show (empty when all is well).</summary>
+        public string Warning { get; private set; } = "";
         /// <summary>
         /// Result of Save clip (raised on the recorder's thread): true + what was kept once the clip's file is finished,
         /// or false + why nothing could be saved.
@@ -144,14 +158,16 @@ namespace W10MDashcam.Recording
                     if (_dropping)
                     {
                         // resume at a keyframe once the writer has caught up
-                        if (!key || _queuedBytes > MaxQueueBytes / 2) { _dropped++; return; }
+                        if (!key || _queuedBytes > MaxQueueBytes / 2) { _dropped++; _dropRun++; return; }
                         _dropping = false;
-                        _queue.Enqueue(Cmd.End); // the gap ends this file; the next one starts at this keyframe
+                        _queue.Enqueue(new DropMark { Frames = _dropRun }); // the gap ends this file; the next one starts at this keyframe
+                        _dropRun = 0;
                     }
                     else if (_queuedBytes + bytes > MaxQueueBytes)
                     {
                         _dropping = true;
                         _dropped++;
+                        _dropRun = 1;
                         return;
                     }
                     _queue.Enqueue(new VideoFrame { Nals = nals, Time = time, Key = key, Bytes = bytes });
@@ -184,7 +200,14 @@ namespace W10MDashcam.Recording
         public void EndSegment() => Enqueue(new Command { What = Cmd.End }, 0);
 
         /// <summary>Keep the current recording and the one before it (moved to Saved, never loop-deleted).</summary>
-        public void SaveClip() => Enqueue(new Command { What = Cmd.Save }, 0);
+        public void SaveClip(string reason = "button", bool forceKeepNext = false) =>
+            Enqueue(new Command { What = Cmd.Save, Reason = reason, KeepNext = forceKeepNext || KeepNextFile }, 0);
+
+        /// <summary>Keep a loop recording (move it to Saved; the file being recorded is kept when it ends).</summary>
+        public void Lock(string name) { if (OwnName.IsMatch(name ?? "")) Enqueue(new Command { What = Cmd.Lock, Name = name }, 0); }
+
+        /// <summary>Give a saved clip back to loop recording (it may then be deleted like any other loop file).</summary>
+        public void Unlock(string name) { if (OwnName.IsMatch(name ?? "")) Enqueue(new Command { What = Cmd.Unlock, Name = name }, 0); }
 
         /// <summary>Apply changed limits now (delete old recordings if needed).</summary>
         public void Housekeep() => Enqueue(new Command { What = Cmd.Housekeep }, 0);
@@ -250,6 +273,11 @@ namespace W10MDashcam.Recording
                 case VideoFrame f: await OnVideoAsync(f); break;
                 case AudioSample a: OnAudioSample(a); break;
                 case Cmd c: await RunCommandAsync(new Command { What = c }); break;
+                case DropMark d:
+                    Log("Recording: the writer fell behind - " + d.Frames + " frames dropped; the file ends here and a new one starts");
+                    if (_seg != null) await CloseAsync(-1);
+                    _lastVideoTime = -1;
+                    break;
                 case Command c: await RunCommandAsync(c); break;
                 case ParamSets p:
                     bool changed = _sps != null && (!_sps.SequenceEqual(p.Sps) || !_pps.SequenceEqual(p.Pps));
@@ -280,7 +308,13 @@ namespace W10MDashcam.Recording
                         _lastVideoTime = -1;
                         break;
                     case Cmd.Save:
-                        await SaveAsync();
+                        await SaveAsync(c.Reason ?? "button", c.KeepNext);
+                        break;
+                    case Cmd.Lock:
+                        await LockAsync(c.Name);
+                        break;
+                    case Cmd.Unlock:
+                        await UnlockAsync(c.Name);
                         break;
                     case Cmd.Relocate:
                         if (_seg != null) await CloseAsync(-1);
@@ -288,8 +322,12 @@ namespace W10MDashcam.Recording
                         _root = null;
                         await EnsureFoldersAsync();
                         break;
-                    case Cmd.Housekeep:
-                        _root = null; // re-read the folder (a file may have been deleted from the web page)
+                    case Cmd.Rescan:
+                        _root = null; // re-read the folder (a file was deleted from the web page)
+                        await EnsureFoldersAsync();
+                        await HousekeepAsync();
+                        break;
+                    case Cmd.Housekeep:                 // settings changed: apply them, without re-reading every file
                         await EnsureFoldersAsync();
                         await HousekeepAsync();
                         break;
@@ -351,8 +389,10 @@ namespace W10MDashcam.Recording
             if (s == null || s.Pending.Count == 0) return Task.CompletedTask;
             var audio = new List<AudioSample>();
             int keep = 0;
-            foreach (var a in s.Audio)
+            // (index loop: writing s.Audio[keep] inside a foreach over s.Audio throws "collection was modified")
+            for (int i = 0; i < s.Audio.Count; i++)
             {
+                var a = s.Audio[i];
                 if (nextTime < 0 || a.Time < nextTime) audio.Add(a);
                 else s.Audio[keep++] = a;
             }
@@ -394,6 +434,7 @@ namespace W10MDashcam.Recording
                 _seg = new Segment { File = file, Stream = stream, Writer = writer, Name = file.Name, Start = firstTime };
                 if (_carryAudio != null && writer.HasAudio) _seg.Audio.AddRange(_carryAudio.Where(x => x.Time >= firstTime));
                 _carryAudio = null;
+                if (_protectNext) { _seg.Protect = true; _seg.Note = _nextNote; _protectNext = false; }
                 State = "recording";
                 LastError = "";
                 CurrentSeconds = 0;
@@ -427,6 +468,7 @@ namespace W10MDashcam.Recording
             if (State == "recording") State = Enabled ? "starting the next file" : "off";
             if (s.Protect)
             {
+                SetNote(s.Name, s.Note ?? "saved");
                 await SaveOrQueueAsync(s.File);
                 if (_cutRequested)
                 {
@@ -443,6 +485,98 @@ namespace W10MDashcam.Recording
             _lastClosedKnown = true;
         }
 
+        private async Task LockAsync(string name)
+        {
+            await EnsureFoldersAsync();
+            if (_seg != null && _seg.Name == name)
+            {
+                _seg.Protect = true;
+                if (_seg.Note == null) _seg.Note = "kept from the list";
+                Log("Keep: " + name + " is being recorded - it is kept when it ends");
+                return;
+            }
+            var info = _segments.FirstOrDefault(x => x.Name == name);
+            if (info == null) { Log("Keep: " + name + " is not a loop recording here"); return; }
+            try
+            {
+                var f = await _loop.GetFileAsync(name);
+                SetNote(name, "kept from the list");
+                await SaveOrQueueAsync(f);
+                _segments.Remove(info);
+                if (_lastClosed == name) _lastClosed = null;
+                UpdateTotals();
+                Log("Keep: " + name + " moved to Saved");
+            }
+            catch (Exception ex) { Log("Keep " + name + " failed: " + ex.Message); }
+        }
+
+        private async Task UnlockAsync(string name)
+        {
+            await EnsureFoldersAsync();
+            try
+            {
+                var f = await _saved.GetFileAsync(name);
+                await f.MoveAsync(_loop, f.Name, NameCollisionOption.GenerateUniqueName);
+                var p = await f.GetBasicPropertiesAsync();
+                _segments.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
+                _segments.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+                SavedClips = Math.Max(0, SavedClips - 1);
+                RemoveNote(name);
+                UpdateTotals();
+                Log("Unlocked " + name + ": back in loop recording (deleted when it is the oldest)");
+            }
+            catch (FileNotFoundException) { Log("Unlock: " + name + " is not in Saved"); }
+            catch (Exception ex) { Log("Unlock " + name + " failed (try again in a moment): " + ex.Message); }
+        }
+
+        // ---- why each saved clip was kept (kept in the settings, newest 300)
+        private readonly object _notesLock = new object();
+        private List<KeyValuePair<string, string>> _notes;
+        private const string NotesKey = "RecClipNotes";
+
+        private void LoadNotes()
+        {
+            if (_notes != null) return;
+            _notes = new List<KeyValuePair<string, string>>();
+            try
+            {
+                foreach (var line in (ApplicationData.Current.LocalSettings.Values[NotesKey] as string ?? "").Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    int bar = line.IndexOf('|');
+                    if (bar > 0) _notes.Add(new KeyValuePair<string, string>(line.Substring(0, bar), line.Substring(bar + 1)));
+                }
+            }
+            catch { }
+        }
+
+        private void SaveNotes()
+        {
+            try { ApplicationData.Current.LocalSettings.Values[NotesKey] = string.Join("\n", _notes.Select(x => x.Key + "|" + x.Value)); }
+            catch { }
+        }
+
+        private void SetNote(string name, string note)
+        {
+            lock (_notesLock)
+            {
+                LoadNotes();
+                _notes.RemoveAll(x => x.Key == name);
+                _notes.Add(new KeyValuePair<string, string>(name, (note ?? "").Replace("|", "/").Replace("\n", " ")));
+                if (_notes.Count > 300) _notes.RemoveRange(0, _notes.Count - 300);
+                SaveNotes();
+            }
+        }
+
+        private void RemoveNote(string name)
+        {
+            lock (_notesLock) { LoadNotes(); if (_notes.RemoveAll(x => x.Key == name) > 0) SaveNotes(); }
+        }
+
+        public string NoteFor(string name)
+        {
+            lock (_notesLock) { LoadNotes(); return _notes.Where(x => x.Key == name).Select(x => x.Value).LastOrDefault(); }
+        }
+
         /// <summary>2026-10-30_15-23-42.mp4 -> 15:23:42</summary>
         private static string ShortName(string name)
         {
@@ -450,9 +584,17 @@ namespace W10MDashcam.Recording
             return m.Success ? m.Groups[1].Value + ":" + m.Groups[2].Value + ":" + m.Groups[3].Value : name;
         }
 
-        private async Task SaveAsync()
+        private bool _protectNext;   // the next file starts protected (Save clip with "keep the next file")
+        private string _nextNote;
+
+        private async Task SaveAsync(string reason, bool keepNext)
         {
-            if (_cutRequested && _seg != null) { Log("Save clip: already saving"); return; }
+            if (_cutRequested && _seg != null)
+            {
+                if (keepNext && !_protectNext) { _protectNext = true; _nextNote = reason + " (after)"; }
+                Log("Save clip (" + reason + "): already saving");
+                return;
+            }
             await EnsureFoldersAsync();
             var kept = new List<string>();
             // The file just before the current one (the moments before) - only that one, and only once:
@@ -467,6 +609,7 @@ namespace W10MDashcam.Recording
                     var props = await f.GetBasicPropertiesAsync();
                     if (_seg != null || (DateTimeOffset.Now - props.DateModified).TotalMinutes < 10)
                     {
+                        SetNote(prev.Name, reason + " (before)");
                         await SaveOrQueueAsync(f);
                         _segments.Remove(prev); // kept either way: moved now, or protected until the move succeeds
                         UpdateTotals();
@@ -479,14 +622,17 @@ namespace W10MDashcam.Recording
             {
                 // Finish the current file at the next keyframe (within ~2 s): it is saved, and a new file starts with no gap.
                 _seg.Protect = true;
+                _seg.Note = reason;
                 _cutRequested = true;
                 kept.Add(_seg.Name);
-                _clipText = string.Join(" + ", kept.Select(ShortName));
-                Log("Save clip: keeping " + string.Join(", ", kept) + " - the current file ends now and a new one starts");
+                _protectNext = keepNext;
+                _nextNote = reason + " (after)";
+                _clipText = string.Join(" + ", kept.Select(ShortName)) + (keepNext ? " + the next " + SegmentSeconds / 60 + " min" : "");
+                Log("Save clip (" + reason + "): keeping " + string.Join(", ", kept) + (keepNext ? " and the next file" : "") + " - the current file ends now and a new one starts");
             }
             else if (kept.Count > 0)
             {
-                Log("Clip saved: " + string.Join(", ", kept) + " (not recording now)");
+                Log("Clip saved (" + reason + "): " + string.Join(", ", kept) + " (not recording now)");
                 RaiseClip(true, string.Join(" + ", kept.Select(ShortName)));
             }
             else
@@ -646,7 +792,7 @@ namespace W10MDashcam.Recording
             _saved = await root.CreateFolderAsync("Saved", CreationCollisionOption.OpenIfExists);
             _segments.Clear();
             LoadPending();
-            foreach (var f in (await _loop.GetFilesAsync()).Where(x => OwnName.IsMatch(x.Name)).OrderBy(x => x.Name))
+            foreach (var f in (await ListMp4Async(_loop)).Where(x => OwnName.IsMatch(x.Name)).OrderBy(x => x.Name))
             {
                 if (_seg != null && f.Name == _seg.Name) continue;
                 if (IsPending(f.Name)) continue; // a saved clip waiting to be moved: never loop-deleted
@@ -654,7 +800,7 @@ namespace W10MDashcam.Recording
                 _segments.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
             }
             if (!_lastClosedKnown) { _lastClosedKnown = true; _lastClosed = _segments.LastOrDefault()?.Name; }
-            SavedClips = (await _saved.GetFilesAsync()).Count(x => x.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase));
+            SavedClips = (await ListMp4Async(_saved)).Count;
             _root = root;
             if (Location != where) Log("Recordings: " + where + ", " + _segments.Count + " loop files, " + SavedClips + " saved");
             Location = where;
@@ -677,6 +823,16 @@ namespace W10MDashcam.Recording
             long used = LoopBytes + current;
             // keep room for the file being written to reach its full length
             long headroom = _seg != null ? Math.Max(0, _seg.Writer.BytesWritten * SegmentSeconds / Math.Max(1, (long)CurrentSeconds + 1) - current) : 0;
+            // saved clips: their space, and (if allowed) replace the oldest when over it or when the storage is short
+            var saved = new List<RecordingInfo>();
+            foreach (var f in (await ListMp4Async(_saved)).OrderBy(x => x.Name))
+            {
+                var p = await f.GetBasicPropertiesAsync();
+                saved.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size });
+            }
+            SavedClips = saved.Count;
+            SavedBytes = saved.Sum(x => x.Size);
+
             int deleted = 0;
             long freed = 0;
             while (_segments.Count > 0 && (used > LimitBytes || (FreeBytes >= 0 && FreeBytes - headroom < MinFreeBytes)))
@@ -697,12 +853,53 @@ namespace W10MDashcam.Recording
             }
             UpdateTotals();
             if (deleted > 0) Log(string.Format("Loop recording: deleted {0} oldest file(s), {1:0} MB", deleted, freed / 1048576.0));
+
+            int replaced = 0;
+            while (ReplaceOldSaved && saved.Count > 1 &&
+                   (SavedBytes > SavedLimitBytes || (FreeBytes >= 0 && FreeBytes - headroom < MinFreeBytes && _segments.Count == 0)))
+            {
+                var old = saved[0];
+                saved.RemoveAt(0);
+                try { await (await _saved.GetFileAsync(old.Name)).DeleteAsync(StorageDeleteOption.PermanentDelete); }
+                catch (FileNotFoundException) { }
+                catch (Exception ex) { Log("Replacing saved clip " + old.Name + " failed: " + ex.Message); break; }
+                RemoveNote(old.Name);
+                SavedBytes -= old.Size;
+                if (FreeBytes >= 0) FreeBytes += old.Size;
+                replaced++;
+            }
+            SavedClips = saved.Count;
+            if (replaced > 0) Log("Saved clips: replaced the " + replaced + " oldest (space for saved clips is full)");
+            SavedFull = SavedBytes > SavedLimitBytes;
+
+            bool storageShort = FreeBytes >= 0 && FreeBytes < MinFreeBytes * 2 && _segments.Count == 0;
+            Warning = SavedFull ? string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "Saved clips use {0:0.0} GB, over their {1:0} GB - delete some, or allow replacing the oldest", SavedBytes / 1073741824.0, SavedLimitBytes / 1073741824.0)
+                : storageShort ? "Storage nearly full: only saved clips are left to make room"
+                : "";
+
             if (FreeBytes >= 0 && FreeBytes < MinFreeBytes / 2 && _segments.Count == 0 && _seg != null)
             {
                 await CloseAsync(-1);
-                await FailAsync("Recording stopped: the storage is full (only saved clips left). Delete some saved clips.");
+                await FailAsync("Recording stopped: the storage is full of saved clips. Delete some, or allow replacing the oldest saved clips.");
                 _retryAfter = DateTime.UtcNow.AddSeconds(60);
             }
+        }
+
+        /// <summary>
+        /// The .mp4 files in a folder, with their sizes fetched in the same query (asking each file separately goes
+        /// through the storage broker one call at a time: seconds for a few dozen files in a library folder).
+        /// The indexer is not used: it can miss a file that has just been written.
+        /// </summary>
+        private static async Task<IReadOnlyList<StorageFile>> ListMp4Async(StorageFolder folder)
+        {
+            var q = new Windows.Storage.Search.QueryOptions(Windows.Storage.Search.CommonFileQuery.DefaultQuery, new[] { ".mp4" })
+            {
+                FolderDepth = Windows.Storage.Search.FolderDepth.Shallow,
+                IndexerOption = Windows.Storage.Search.IndexerOption.DoNotUseIndexer
+            };
+            q.SetPropertyPrefetch(PropertyPrefetchOptions.BasicProperties, null);
+            return await folder.CreateFileQueryWithOptions(q).GetFilesAsync();
         }
 
         private static async Task<long> GetFreeSpaceAsync(StorageFolder folder)
@@ -726,11 +923,12 @@ namespace W10MDashcam.Recording
             string current = CurrentName;
             foreach (var pair in new[] { Tuple.Create(loop, false), Tuple.Create(saved, true) })
             {
-                foreach (var f in await pair.Item1.GetFilesAsync())
+                foreach (var f in await ListMp4Async(pair.Item1))
                 {
                     if (!f.Name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || (!pair.Item2 && !OwnName.IsMatch(f.Name))) continue;
                     BasicProperties p = await f.GetBasicPropertiesAsync();
-                    list.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size, Saved = pair.Item2, Recording = !pair.Item2 && f.Name == current });
+                    list.Add(new RecordingInfo { Name = f.Name, Size = (long)p.Size, Saved = pair.Item2, Recording = !pair.Item2 && f.Name == current,
+                        Note = pair.Item2 ? NoteFor(f.Name) : null });
                 }
             }
             return list.OrderByDescending(x => x.Name).ToList();
@@ -764,7 +962,7 @@ namespace W10MDashcam.Recording
                 var f = await folder.GetFileAsync(name);
                 await f.DeleteAsync(StorageDeleteOption.PermanentDelete);
                 if (saved) SavedClips = Math.Max(0, SavedClips - 1);
-                else Housekeep(); // the worker refreshes its list
+                else Enqueue(new Command { What = Cmd.Rescan }, 0); // the worker refreshes its list
                 Log("Deleted recording " + (saved ? "Saved\\" : "") + name);
                 return null;
             }

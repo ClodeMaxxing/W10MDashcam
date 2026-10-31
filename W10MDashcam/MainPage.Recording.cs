@@ -63,6 +63,7 @@ namespace W10MDashcam
             _loadingRecUi = false;
             HookCameraButton();
             _recorder.ClipResult += (ok, text) => { var _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => OnClipResult(ok, text)); };
+            LoadSafetySettings();
         }
 
         private void SetRecorderLimits(int segmentMin, int limitGb)
@@ -175,7 +176,9 @@ namespace W10MDashcam
         /// when the current file has been finished (next keyframe, within ~2 s) - a chime and "CLIP SAVED".
         /// The camera keeps running: the next file starts with no gap.
         /// </summary>
-        private async void RequestSaveClip(string from)
+        private string _clipReason = "button";
+
+        private async void RequestSaveClip(string from, string reason = "button", bool forceKeepNext = false)
         {
             try
             {
@@ -186,11 +189,12 @@ namespace W10MDashcam
                     await BuzzAsync(2);
                     return;
                 }
-                if (!_clipSaving)
+                if (!_clipSaving || forceKeepNext) // an impact during a pending save still adds "keep the next file"
                 {
                     _clipSaving = true;
                     _clipSavingSince = DateTime.Now;
-                    _recorder.SaveClip();
+                    _clipReason = reason;
+                    _recorder.SaveClip(reason, forceKeepNext);
                 }
                 UpdateRecordingUi();
                 await BuzzAsync(1);
@@ -202,7 +206,9 @@ namespace W10MDashcam
         {
             _clipSaving = false;
             _clipOk = ok;
-            _clipText = ok ? "Clip saved (" + text + ") - a new file has started" : text;
+            bool impact = _clipReason.StartsWith("impact", StringComparison.Ordinal);
+            _clipText = ok ? (impact ? "IMPACT (" + _clipReason.Substring(7) + ") - " : "") + "Clip saved (" + text + ") - a new file has started" : text;
+            _clipReason = "button";
             _clipShowUntil = DateTime.Now.AddSeconds(5);
             PlayChime(ok);
             UpdateRecordingUi();
@@ -352,12 +358,14 @@ namespace W10MDashcam
             UpdateSaveButton(rec);
             LocationText.Text = string.IsNullOrEmpty(r.Location) ? "Decided when recording starts" : "Now: " + r.Location;
             UpdateRunButtons();
+            UpdateSafetyUi();
         }
 
         private string RecordingSummary()
         {
             var r = _recorder;
             if (!string.IsNullOrEmpty(r.LastError) && r.State == "error") return r.LastError;
+            if (!string.IsNullOrEmpty(r.Warning)) return "WARNING: " + r.Warning;
             if (string.IsNullOrEmpty(r.Location)) return r.Enabled ? "Starts with the camera" : "Recording is stopped";
             string s = string.Format(CultureInfo.InvariantCulture, "Saved clips: {0}  -  loop: {1} older file{2} ({3:0.0} GB)",
                 r.SavedClips, r.LoopCount, r.LoopCount == 1 ? "" : "s", r.LoopBytes / 1073741824.0);
@@ -374,6 +382,7 @@ namespace W10MDashcam
         /// </summary>
         private async Task ApplyRecordingConfigAsync(IDictionary<string, string> form, List<string> done)
         {
+            await ApplySafetyConfigAsync(form, done);
             bool uiChange = false, matchCamera = false;
             if (form.TryGetValue("record", out var rec))
             {
@@ -445,9 +454,10 @@ namespace W10MDashcam
             "live=" + (_wantLive ? "on" : "off") + ", liveonopen=" + (LiveOnOpen ? "on" : "off") + "\n" +
             "location=" + _recorder.StorageMode + " (now: " + _recorder.Location + ")\n" +
             "segment=" + SegmentMinutes + " (minutes per file)\n" +
-            "storage=" + (LimitGb == 0 ? "all" : LimitGb.ToString()) + " (GB the loop recordings may use; all = all free space but 1 GB)\n";
+            "storage=" + (LimitGb == 0 ? "all" : LimitGb.ToString()) + " (GB the loop recordings may use; all = all free space but 1 GB)\n" +
+            SafetyConfigText();
 
-        private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=GB|all, saveclip=1";
+        private const string RecordingConfigHelp = ", record=on|off, recordonopen=on|off, live=on|off, liveonopen=on|off, location=auto|phone|sd|custom, segment=MINUTES, storage=GB|all, saveclip=1, impact=off|low|medium|high, keepnext=on|off, savedlimit=GB|none, replacesaved=on|off";
 
         private void AddRecordingJson(JsonObject o)
         {
@@ -473,6 +483,7 @@ namespace W10MDashcam
             j["writeMBps"] = JsonValue.CreateNumberValue(Math.Round(r.WriteMBps, 2));
             j["maxWriteMs"] = JsonValue.CreateNumberValue(r.MaxWriteMs);
             j["error"] = JsonValue.CreateStringValue(r.LastError);
+            AddSafetyJson(j);
             o["recording"] = j;
         }
     }
