@@ -1,5 +1,21 @@
 # Changelog
 
+## W10MDashcam 0.7.7
+
+Security fixes; nothing else changes.
+
+- A single crafted RTSP request with a negative `Content-Length` made the app handle the same request again forever
+  until it ran out of memory, which stopped recording. It needed no login and reached the RTSP ports, which are always
+  on (8554, and 8020 over USB). Such a request now closes the connection, and a client that never reads its replies
+  is disconnected after 64.
+- The login is needed over the USB cable too. Any program or web page on the PC the phone is plugged into can reach
+  the USB port, so "no login over USB" let a web page delete every recording, saved clips included, or reset the
+  login. The web page, `/status`, the recordings, downloads and `/config` now ask for the login on every port.
+- Changes (`/config`, `/camera/set`, `/recordings/...`) also need the `X-Requested-With: W10MDashcam` header and the
+  phone's address in the `Host` header, over USB too.
+- `tools\set-camera-config.ps1` and `tools\get-phone-log-usb.ps1` take `-User` / `-Password` (or the `W10M_USER` /
+  `W10M_PASSWORD` environment variables) and ask otherwise.
+
 ## W10MDashcam 0.7.6 (first release)
 
 A dashcam app forked from W10MSecurityCam 1.1 (build 1.9.29).
