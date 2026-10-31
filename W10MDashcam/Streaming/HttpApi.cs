@@ -39,6 +39,8 @@ namespace W10MDashcam.Streaming
     ///   /recordings   the dashcam recordings as JSON; /recordings/file?name=N[&amp;saved=1][&amp;dl=1] plays or downloads one;
     ///                 /recordings/srt?name=N[&amp;saved=1] its captions as an .srt file;
     ///                 POST /recordings/save keeps the current clip, POST /recordings/delete (name, saved) deletes one
+    /// Everything needs the stream login, over USB too. Changes (POST) also need the X-Requested-With: W10MDashcam
+    /// header and the phone's address as Host.
     /// </summary>
     internal sealed class HttpApi
     {
@@ -67,8 +69,9 @@ namespace W10MDashcam.Streaming
             {
                 if (!WebEnabled) return WebOff();
                 string path = r.Path.TrimEnd('/');
-                // Everything needs the login except requests over the USB cable (only the PC it is plugged into can make those).
-                if (Auth != null && Auth.Enabled && !r.FromUsb && !Auth.Check(r.Method, Header(r, "Authorization"), out bool gateStale))
+                // Everything needs the login, over USB too: any program or web page on the PC the phone is plugged into
+                // can reach the USB port, so being on USB proves nothing.
+                if (Auth != null && Auth.Enabled && !Auth.Check(r.Method, Header(r, "Authorization"), out bool gateStale))
                     return Reply(401, "Unauthorized", "text/plain", "Login required\n", Auth.Challenge(gateStale));
                 if (path == "" || path == "/log")
                     return LogEnabled ? Reply(200, "OK", "text/plain; charset=utf-8", GetLog()) : LogOff();
@@ -105,6 +108,8 @@ namespace W10MDashcam.Streaming
                     if (!r.FromUsb) return Reply(403, "Forbidden", "text/plain", "Settings can only be changed over the USB cable\n");
                     if (r.Method == "POST" && ApplyConfig != null)
                     {
+                        string refused = RefuseForeignPost(r);
+                        if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
                         var form = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
                         string result = await ApplyConfig(form);
                         return Reply(200, "OK", "text/plain; charset=utf-8", result + "\n\n" + GetConfig());
@@ -121,15 +126,15 @@ namespace W10MDashcam.Streaming
         }
 
         /// <summary>
-        /// The camera-settings page. With a stream login set, everything here needs the login. With no login the
-        /// page is view-only from the network (changes only over USB), as for /config.
+        /// The camera-settings page. Everything here needs the stream login (over USB too); with no login the page is
+        /// view only.
         /// </summary>
         private async Task<byte[]> HandleCameraAsync(HttpRequest r, string path)
         {
             string result = null;
             bool loginSet = Auth != null && Auth.Enabled;
-            bool canWrite = r.FromUsb || loginSet;
-            if (loginSet && !r.FromUsb && !Auth.Check(r.Method, Header(r, "Authorization"), out bool stale))
+            bool canWrite = loginSet;
+            if (loginSet && !Auth.Check(r.Method, Header(r, "Authorization"), out bool stale))
                 return Reply(401, "Unauthorized", "text/plain", "Login required\n", Auth.Challenge(stale));
 
             if (path == "/camera")
@@ -139,11 +144,9 @@ namespace W10MDashcam.Streaming
             {
                 if (r.Method != "POST") return Reply(405, "Method Not Allowed", "text/plain", "POST only\n");
                 if (!canWrite)
-                    return Reply(403, "Forbidden", "text/plain", "Changes need the login (or the USB cable)\n");
-                // A web page on another site could make the browser send a POST with the saved login; a custom header
-                // cannot be added by such a page without our permission (we never grant it), so require it.
-                if (!r.FromUsb && Header(r, "X-Requested-With") != "W10MDashcam")
-                    return Reply(403, "Forbidden", "text/plain", "Use the settings page (missing X-Requested-With header)\n");
+                    return Reply(403, "Forbidden", "text/plain", "Changes need the login\n");
+                string refused = RefuseForeignPost(r);
+                if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
                 var all = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip", "resume", "testincident", "powerloss", "testpowerloss", "log", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved", "gps", "units", "subtitles" })
@@ -183,10 +186,10 @@ namespace W10MDashcam.Streaming
                 return Reply(200, "OK", "application/json", sb.ToString(), "Cache-Control: no-store\r\n");
             }
             if (r.Method != "POST") return Reply(405, "Method Not Allowed", "text/plain", "POST only\n");
-            bool canWrite = r.FromUsb || (Auth != null && Auth.Enabled);
-            if (!canWrite) return Reply(403, "Forbidden", "text/plain", "Changes need the login (or the USB cable)\n");
-            if (!r.FromUsb && Header(r, "X-Requested-With") != "W10MDashcam")
-                return Reply(403, "Forbidden", "text/plain", "Use the settings page (missing X-Requested-With header)\n");
+            bool canWrite = Auth != null && Auth.Enabled;
+            if (!canWrite) return Reply(403, "Forbidden", "text/plain", "Changes need the login\n");
+            string refused = RefuseForeignPost(r);
+            if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
             if (path == "/recordings/save")
             {
                 Recorder.SaveClip();
@@ -238,7 +241,7 @@ namespace W10MDashcam.Streaming
             try
             {
                 if (!WebEnabled) return new FileReply { Error = WebOff() };
-                if (Auth != null && Auth.Enabled && !r.FromUsb && !Auth.Check(r.Method, Header(r, "Authorization"), out bool stale))
+                if (Auth != null && Auth.Enabled && !Auth.Check(r.Method, Header(r, "Authorization"), out bool stale))
                     return new FileReply { Error = Reply(401, "Unauthorized", "text/plain", "Login required\n", Auth.Challenge(stale)) };
                 var q = ParseForm(r.Query);
                 string name = q.TryGetValue("name", out var n) ? n : "";
@@ -291,6 +294,42 @@ namespace W10MDashcam.Streaming
             if (f.TryGetValue("password", out var p) && (p == null || p.Length < 4 || p.Length > 64 || p.Any(ch => ch < ' ')))
             { f.Remove("user"); f.Remove("password"); return "Not changed: the password needs 4-64 characters"; }
             return null;
+        }
+
+        public const string ClientHeader = "W10MDashcam";
+
+        /// <summary>
+        /// Null when a change request may go ahead, otherwise why it is refused. A web page on another site could make the
+        /// browser send a POST with the saved login. Such a page cannot add a custom header without our permission (never
+        /// granted), and a DNS-rebinding page would send its own host name instead of an IP address, so both checks
+        /// together leave only this app's own page and the tools. Over USB too.
+        /// </summary>
+        private static string RefuseForeignPost(HttpRequest r)
+        {
+            if (Header(r, "X-Requested-With") != ClientHeader)
+                return "Use the settings page (missing X-Requested-With header)\n";
+            if (!HostIsAddress(Header(r, "Host"), r.FromUsb))
+                return "Use the phone's address (http://127.0.0.1:8020 over USB, http://PHONE-IP:5001 over Wi-Fi)\n";
+            return null;
+        }
+
+        /// <summary>The Host header is the phone's address: 127.0.0.1 / localhost over USB, an IP address over Wi-Fi.</summary>
+        private static bool HostIsAddress(string host, bool fromUsb)
+        {
+            if (string.IsNullOrEmpty(host)) return true; // HTTP/1.0 clients may leave it out; browsers always send it
+            string name = host;
+            if (name.StartsWith("["))
+            {
+                int close = name.IndexOf(']');
+                name = close > 0 ? name.Substring(1, close - 1) : name;
+            }
+            else
+            {
+                int colon = name.LastIndexOf(':');
+                if (colon > 0) name = name.Substring(0, colon);
+            }
+            if (fromUsb) return name == "127.0.0.1" || name.Equals("localhost", StringComparison.OrdinalIgnoreCase);
+            return System.Net.IPAddress.TryParse(name, out _);
         }
 
         private static string Header(HttpRequest r, string name) => r.Headers.TryGetValue(name, out var v) ? v : null;
