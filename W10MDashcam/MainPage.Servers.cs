@@ -23,22 +23,19 @@ namespace W10MDashcam
         /// <summary>From LoadRecordingSettings (constructor, before the servers start).</summary>
         private void LoadServerSettings()
         {
-            if (!(_settings.Values["WebServerOn"] is bool))
-            {
-                // First run with these switches: an existing install keeps its pages, a new one starts with them off.
-                bool existing = _settings.Values.ContainsKey("RecLocation") || _settings.Values.ContainsKey("RecLimitGB")
-                    || _settings.Values.ContainsKey("RecAutoStart") || _settings.Values.ContainsKey("RecSegmentMin");
-                _settings.Values["WebServerOn"] = existing;
-                _settings.Values["LogServerOn"] = existing;
-            }
+            // Off until switched on. (Before 0.8 an install made before these switches existed had them switched on
+            // automatically; only development builds before 0.7.6 were affected, but nothing opens by itself now.)
             _webOn = _settings.Values["WebServerOn"] is bool w && w;
             _logOn = _settings.Values["LogServerOn"] is bool l && l;
+            bool deleteSaved = _settings.Values["WebDeleteSaved"] is bool d && d;
             _api.WebEnabled = _webOn;
             _api.LogEnabled = _logOn;
+            _api.AllowDeleteSaved = deleteSaved;
             _api.GetStatsRows = StatsRows;
             WebServerToggle.IsOn = _webOn;
             LogServerToggle.IsOn = _logOn;
-            LogServerToggle.IsEnabled = _webOn;
+            WebDeleteSavedToggle.IsOn = deleteSaved;
+            LogServerToggle.IsEnabled = WebDeleteSavedToggle.IsEnabled = _webOn;
             _loadingServerUi = false;
         }
 
@@ -59,6 +56,15 @@ namespace W10MDashcam
             UpdateServerUi();
         }
 
+        private void WebDeleteSavedToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (_loadingServerUi) return;
+            bool on = WebDeleteSavedToggle.IsOn;
+            _settings.Values["WebDeleteSaved"] = on;
+            _api.AllowDeleteSaved = on;
+            Log("Deleting saved clips from the web page " + (on ? "allowed" : "not allowed"));
+        }
+
         private void LogServerToggle_Toggled(object sender, RoutedEventArgs e)
         {
             if (_loadingServerUi) return;
@@ -77,7 +83,7 @@ namespace W10MDashcam
         /// <summary>The web page addresses under Network and login (or that it is off).</summary>
         private void UpdateServerUi()
         {
-            LogServerToggle.IsEnabled = _webOn;
+            LogServerToggle.IsEnabled = WebDeleteSavedToggle.IsEnabled = _webOn;
             if (!_webOn) { WebAddressText.Text = "Off - switch it on below"; return; }
             var lines = _ips.Select(ip => "http://" + ip + ":" + LogPort + "/camera").ToList();
             if (lines.Count == 0) lines.Add("(not on Wi-Fi)");

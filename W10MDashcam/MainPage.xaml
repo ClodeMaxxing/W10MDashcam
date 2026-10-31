@@ -389,6 +389,11 @@
                         <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
                             Text="Also serves the app's log (/log) and graphs of the last 12 hours (/stats: frame rate, storage, battery, power, heat, memory). Needs the web page on." /></Flyout></Button.Flyout></Button>
                     </Grid>
+                    <Grid>
+                        <ToggleSwitch x:Name="WebDeleteSavedToggle" Header="Delete saved clips from the web page" IsOn="False" Toggled="WebDeleteSavedToggle_Toggled" />
+                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                            Text="Off (the default): nothing over the network can delete, unlock or replace saved clips, or change their limit, even with the login. Saved clips can then only be removed here on the phone. Loop recordings can still be deleted from the web page." /></Flyout></Button.Flyout></Button>
+                    </Grid>
                     <TextBlock Text="Live view (RTSP, for VLC or an NVR):" Foreground="#7F9A86" FontSize="12" />
                     <TextBlock x:Name="AddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap"
                                FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />

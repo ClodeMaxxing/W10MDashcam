@@ -140,7 +140,7 @@ button.danger{background:#3a1010;color:#ffd0d0;border-color:#a03030}button.dange
 <h2>Network and login</h2>
 <div class='row'><label><input type='checkbox' id='lgo'> Log and stats pages</label> <span id='lglinks'><a href='/log' target='_blank' style='color:#9cf0b0'>log</a> &middot; <a href='/stats' target='_blank' style='color:#9cf0b0'>stats</a></span><i class='tip' data-tip='The app log (/log) and graphs of the last 12 hours (/stats). The web page itself can only be switched off on the phone.'>i</i></div>
 <div class='row'><div class='sub' style='margin-bottom:6px'><span id='lmsg'>One login protects the stream and this page.</span><i class='tip' data-tip='Use the new login in your NVR / VLC: rtsp://USER:PASSWORD@phone-address:8554/live. The browser asks you to sign in again after a change.'>i</i></div>
-<input id='lu' placeholder='User name'> <input id='lp' type='password' placeholder='New password'> <input id='lp2' type='password' placeholder='Repeat password'>
+<input id='lc' type='password' placeholder='Current password'> <input id='lu' placeholder='User name'> <input id='lp' type='password' placeholder='New password'> <input id='lp2' type='password' placeholder='Repeat password'>
 <button id='lb'>Change login</button></div>
 <div id='msg'></div><div id='tipbox'></div>
 <script>
@@ -272,9 +272,11 @@ $('lb').onclick=function(){
  var u=$('lu').value.trim(),p=$('lp').value;
  if(p!==$('lp2').value){$('msg').textContent='The two passwords differ';return}
  if(p.length<4){$('msg').textContent='The password needs at least 4 characters';return}
- $('lp').value=$('lp2').value='';
- send('user='+encodeURIComponent(u||'admin')+'&password='+encodeURIComponent(p));
- $('msg').textContent='Login changed - sign in again with the new login'
+ if(!$('lc').value){$('msg').textContent='Enter the current password too';return}
+ var c=$('lc').value;
+ $('lc').value=$('lp').value=$('lp2').value='';
+ send('current='+encodeURIComponent(c)+'&user='+encodeURIComponent(u||'admin')+'&password='+encodeURIComponent(p));
+ $('msg').textContent='Changing the login - if it worked, sign in again with the new login'
 };
 $('tt').onchange=function(){send('torch='+(this.checked?'on':'off'))};
 $('sall').onchange=function(){send('savepower='+(this.checked?'on':'off'))};
@@ -389,7 +391,7 @@ function recList(){
 }
 function recPost(path,body,msg){
  fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'W10MDashcam'},body:body||''})
- .then(function(r){return r.text()}).then(function(t){$('msg').textContent=msg||t;setTimeout(function(){load();recList()},800)});
+ .then(function(r){return r.text().then(function(t){return {ok:r.ok,t:t}})}).then(function(x){$('msg').textContent=x.ok?(msg||x.t):x.t;setTimeout(function(){load();recList()},800)});
 }
 $('rsave').onclick=function(){recPost('/recordings/save','','Saving: the current file ends now (and the one before it is kept too); a new file starts with no gap')};
 $('rref').onclick=recList;

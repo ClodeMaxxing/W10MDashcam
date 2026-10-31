@@ -59,6 +59,20 @@ namespace W10MDashcam.Streaming
         public volatile bool LogEnabled = true;
         /// <summary>The stats samples as JavaScript string literals, for the stats page.</summary>
         public Func<string> GetStatsRows = () => "";
+        /// <summary>
+        /// Phone switch "Delete saved clips from the web page" (off by default). Off: nothing over the network can delete,
+        /// unlock (unlocked clips go back to loop recording) or replace saved clips, nor change the saved-clip limit.
+        /// </summary>
+        public volatile bool AllowDeleteSaved;
+
+        private const string SavedLockedText = "Saved clips can't be deleted, unlocked or replaced from here: switch on \"Delete saved clips from the web page\" on the phone (Network and login).";
+
+        /// <summary>Removes the saved-clip limit fields when the phone doesn't allow that; returns a note, or null.</summary>
+        private string StripSavedLimits(IDictionary<string, string> f)
+        {
+            if (AllowDeleteSaved || !(f.Remove("savedlimit") | f.Remove("replacesaved"))) return null;
+            return "Saved-clip limit not changed (switched off on the phone).";
+        }
 
         private static byte[] WebOff() => Reply(503, "Service Unavailable", "text/plain", "The web page is switched off on the phone (Network and login).\n");
         private static byte[] LogOff() => Reply(404, "Not Found", "text/plain", "The log and stats pages are switched off (Network and login on the phone, or Network and login on the web page).\n");
@@ -111,7 +125,9 @@ namespace W10MDashcam.Streaming
                         string refused = RefuseForeignPost(r);
                         if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
                         var form = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
-                        string result = await ApplyConfig(form);
+                        string note = StripSavedLimits(form);
+                        string result = form.Count > 0 ? await ApplyConfig(form) : "";
+                        if (note != null) result = note + (result.Length > 0 ? "\n" + result : "");
                         return Reply(200, "OK", "text/plain; charset=utf-8", result + "\n\n" + GetConfig());
                     }
                     return Reply(200, "OK", "text/plain; charset=utf-8", GetConfig());
@@ -151,9 +167,11 @@ namespace W10MDashcam.Streaming
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip", "resume", "testincident", "powerloss", "testpowerloss", "log", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved", "gps", "units", "subtitles" })
                     if (all.TryGetValue(k, out var v)) only[k] = v;
-                string bad = CheckLoginFields(only);
+                string note = StripSavedLimits(only);
+                string bad = CheckLoginFields(only) ?? CheckCurrentPassword(only, all);
                 if (bad != null) result = bad;
                 else if (ApplyConfig != null && only.Count > 0) result = await ApplyConfig(only);
+                if (note != null) result = note + (result != null ? " " + result : "");
             }
             string json = GetCameraJson();
             if (result != null)
@@ -196,6 +214,9 @@ namespace W10MDashcam.Streaming
                 return Reply(200, "OK", "text/plain", "Saving the clip\n");
             }
             var form = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
+            bool touchesSaved = path == "/recordings/unlock"
+                || ((path == "/recordings/delete" || path == "/recordings/deleteall") && form.TryGetValue("saved", out var s0) && s0 == "1");
+            if (touchesSaved && !AllowDeleteSaved) return Reply(403, "Forbidden", "text/plain", SavedLockedText + "\n");
             string fname = form.TryGetValue("name", out var fn) ? fn : "";
             if (path == "/recordings/lock") { Recorder.Lock(fname); return Reply(200, "OK", "text/plain", "Keeping " + fname + "\n"); }
             if (path == "/recordings/unlock") { Recorder.Unlock(fname); return Reply(200, "OK", "text/plain", "Unlocking " + fname + "\n"); }
@@ -330,6 +351,18 @@ namespace W10MDashcam.Streaming
             }
             if (fromUsb) return name == "127.0.0.1" || name.Equals("localhost", StringComparison.OrdinalIgnoreCase);
             return System.Net.IPAddress.TryParse(name, out _);
+        }
+
+        /// <summary>
+        /// A login change from the web page needs the current password as well ("current" field): the request itself is
+        /// signed with it, but a signed request captured on the network could otherwise be replayed with a new password.
+        /// </summary>
+        private string CheckCurrentPassword(IDictionary<string, string> only, IDictionary<string, string> all)
+        {
+            if (!only.ContainsKey("user") && !only.ContainsKey("password")) return null;
+            if (Auth != null && Auth.IsCurrentPassword(all.TryGetValue("current", out var c) ? c : null)) return null;
+            only.Remove("user"); only.Remove("password");
+            return "Not changed: enter the current password to change the login";
         }
 
         private static string Header(HttpRequest r, string name) => r.Headers.TryGetValue(name, out var v) ? v : null;
