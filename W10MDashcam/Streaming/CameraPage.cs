@@ -176,7 +176,6 @@ function render(){
  var bt=st.battery==null?'unknown':st.battery+'% ('+st.batteryStatus.toLowerCase()+')';
  var up=Math.round(st.uptime/60),upt=up>=120?Math.round(up/6)/10+' h':up+' min';
  if(st.version)$('ver').textContent='v'+st.version;
- var esc=function(t){return String(t).replace(/[&<>""']/g,function(c){return '&#'+c.charCodeAt(0)+';'})};
  var cpu=/phone (\d+) %, app (\d+)/.exec(st.cpuText||''),fm=/^(\d+)x(\d+)@(\d+)/.exec(st.format||'');
  var res=fm?(fm[2]>=2160?'4K':fm[2]+'p')+fm[3]:'';
  var state=st.protect?'Heat protection':st.streaming?'Streaming':'Stopped',dc=st.protect?'dot hot':st.streaming?'dot on':'dot';
@@ -333,7 +332,8 @@ $('ws').oninput=function(){touched=Date.now();labels();later('wb='+this.value)};
 function mb(b){return b>=1073741824?(b/1073741824).toFixed(1)+' GB':b>0?Math.max(1,Math.round(b/1048576))+' MB':'0 MB'}
 function hms(s){s=Math.floor(s||0);var m=Math.floor(s/60);s=s%60;return m+':'+(s<10?'0':'')+s}
 function fmin(m){return m>=120?(Math.round(m/6)/10)+' h':Math.round(m)+' min'}
-function esc(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;')}
+// one escape for the whole page (status tiles and recordings): text and attribute values in either quote
+function esc(v){return String(v).replace(/[&<>""']/g,function(c){return '&#'+c.charCodeAt(0)+';'})}
 var segs=[1,3,5,10],lims=[-1,4,8,16,32,64,0],slims=[-1,2,4,8,16,32,0],imps={off:'Crash detection: off',low:'Crash detection: low (2.5 g)',medium:'Crash detection: medium (1.6 g)',high:'Crash detection: high (1 g)'},wheres={auto:'Save to: automatic (SD card if present)',phone:'Save to: phone storage',sd:'Save to: SD card',custom:'Save to: chosen folder'};
 function recRender(){
  var r=st&&st.recording;if(!r)return;
