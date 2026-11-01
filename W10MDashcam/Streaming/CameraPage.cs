@@ -206,7 +206,7 @@ function render(){
   +""<div class='grid'>""
   +tile('Battery',st.battery==null?'n/a':st.battery+'% '+st.batteryStatus.toLowerCase(),st.batteryFalling,batt)
   +tile('Wi-Fi',st.wifiBars==null?'n/a':wb+' of 4',st.wifiBars!=null&&wb<2,bars)
-  +tile('Temp','',false,badge(st.heat||'n/a',st.heatWarn?'bad':''),st.heatDetail||'Healthy while charging normally; Unstable when Windows pauses charging because the phone is hot.')
+  +tile('Temp','',false,badge(st.heatBadge||st.heat||'n/a',st.heatLevel==2?'bad':st.heatLevel==1?'mid':''),st.heatDetail||'Windows gives apps no temperature. Hot means charging has paused on a good charger for 20 s, which Windows does when the battery is hot.')
   +tile('CPU phone',cpuP+'%',false,meter(cpuP,cpuP>70?'mid':''),'Whole phone. The camera, encoder and Wi-Fi do most of their work outside the CPU.')
   +tile('CPU app',cpuA+'%',false,meter(cpuA,cpuA>50?'mid':''))
   +tile('Memory',st.memoryMB+' MB',mp>80,meter(mp,mp>80?'low':mp>60?'mid':''),'App memory, of '+ml+' MB allowed.')

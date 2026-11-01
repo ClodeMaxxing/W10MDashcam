@@ -826,7 +826,8 @@ namespace W10MDashcam
                 Wifi3.Fill = bars >= 3 ? on : OffFill; Wifi4.Fill = bars >= 4 ? on : OffFill;
 
                 UpdateDashTiles();
-                SetBadge(TempBadge, TempBadgeDot, TempBadgeText, _heat, _heatWarn ? 2 : 0);
+                var heat = HeatBadge();
+                SetBadge(TempBadge, TempBadgeDot, TempBadgeText, heat.Item1, heat.Item2);
 
                 double cp = _power.SysCpuPct ?? 0, ca = _power.ProcCpuPct ?? 0;
                 CpuPhoneText.Text = _power.SysCpuPct.HasValue ? Math.Round(cp) + "%" : "n/a";
@@ -1355,7 +1356,8 @@ namespace W10MDashcam
             else if (_protect && _chargingSecs >= 30 && (DateTime.Now - _protectSince).TotalMinutes >= 3) { var _x = LeaveProtectionAsync(); }
             else if (_protectRestartOwed && !_protectBusy && !_busy) { var _r = RestartStreamForProtectionAsync(); }
             _heatWarn = paused || _protect;
-            _heat = _protect ? "Unstable (heat protection on)" : paused ? "Unstable (charging paused - probably hot)" : "Healthy";
+            // A brief pause is only a caution (amber); 20 s of it is hot (red), as on the Temp badge (HeatBadge).
+            _heat = _protect ? "Heat protection on" : _pausedSecs >= 20 ? "Hot (charging paused)" : paused ? "Charging paused" : "Healthy";
             // The usual cause is a power source that can't keep up (a PC USB port, a small car adapter): the phone then also
             // draws on its battery, the battery heats, and Windows pauses charging. So the messages point at the charger too.
             _heatDetail = _protect ? "Heat protection: charging paused because the phone is hot - usually the charger can't keep up (a PC USB port or a small adapter; use 2 A or more). Video is 1080p / 6 Mbps and power saving is on until it charges normally again."
@@ -1587,6 +1589,9 @@ namespace W10MDashcam
             o["heat"] = JsonValue.CreateStringValue(_heat);
             o["heatDetail"] = JsonValue.CreateStringValue(_heatDetail);
             o["heatWarn"] = JsonValue.CreateBooleanValue(_heatWarn);
+            var hb = HeatBadge();
+            o["heatBadge"] = JsonValue.CreateStringValue(hb.Item1);
+            o["heatLevel"] = JsonValue.CreateNumberValue(hb.Item2);
             o["chargeNote"] = JsonValue.CreateStringValue(BatteryFalling ? ChargeNote() : "");
             o["powerText"] = JsonValue.CreateStringValue(_power.PowerText());
             o["cpuText"] = JsonValue.CreateStringValue(_power.CpuText());
