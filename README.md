@@ -118,8 +118,11 @@ it; explanations sit behind small (i) icons.
   camera features; stream addresses, login).
 
 **Black screen:** while the camera runs, the phone screen is black and the preview is off (an OLED screen uses almost
-no power for black). Tap it to read the status for 15 seconds; **Show camera picture** shows the picture for 60 seconds
-(the camera restarts briefly to start and stop the preview, which also starts a new file).
+no power for black). Tap it to read the status for 15 seconds; **Show camera picture** (or a tap on the dark preview
+area) shows the picture for 60 seconds (the camera restarts briefly to start and stop the preview, which also starts
+a new file). **Preview on the phone** (under Camera) is off by default; *Keep the preview running behind the black
+screen* (under Power, off by default: it costs CPU and heat) keeps it alive so a tap shows the picture at once; heat
+protection forces that off. The same rules run in W10MSecurityCam and W10MWebCam.
 
 **Heat protection:** Windows 10 Mobile gives apps no temperature. If charging pauses on an adequate charger for
 20 seconds, the phone is probably hot: the app lowers the video to 1080p at 6 Mbps, forces the power-saving options on,

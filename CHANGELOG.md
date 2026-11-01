@@ -1,5 +1,20 @@
 # Changelog
 
+## W10MDashcam 0.9.1
+
+**Preview and black screen, one rule set in all three apps** (`MainPage.Display.cs`, kept in step by Sync-Core):
+- **Preview on the phone** is a switch under *Camera*, **off by default**. On: the picture while stopped, and while
+  streaming unless the screen is blacked out.
+- **Black screen while streaming** also stops the preview. New under *Power*: **Keep the preview running behind the
+  black screen** (off by default: it costs CPU and heat), so a tap on the black screen shows the picture at once;
+  heat protection forces it off and puts it back afterwards.
+- Adjusting the camera on the phone shows the picture for 60 s as before; **a tap on the dark preview area** does the
+  same as *Show camera picture*. The recording-problem and power-loss banners lift the black screen through the same
+  rules. A preview that disagrees with the black screen is fixed with one restart, so the screen can no longer go
+  black with the preview still running.
+- The manual focus / exposure / white balance sliders are always on screen, greyed while automatic.
+- The web page and `/config` gain `preview=on|off` and `keeppreview=on|off`.
+
 ## W10MDashcam 0.9
 
 Feature parity with W10MSecurityCam and W10MWebCam: what one app of the family did better now exists in all three where
