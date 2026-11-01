@@ -41,11 +41,25 @@ namespace W10MDashcam
 
         private bool CameraWanted => _wantLive || _recorder.Enabled;
         private bool RecordOnOpen => !(_settings.Values["RecAutoStart"] is bool r) || r;
-        private bool LiveOnOpen => _settings.Values["AutoStart"] is bool a && a; // off by default: the app is a dashcam first
+        private bool LiveOnOpen => _settings.Values[LiveOnOpenKey] is bool a && a; // off by default: the app is a dashcam first
+        /// <summary>"Live stream when the app opens". Saved as "AutoStart" before 0.8.1 (a name from W10MSecurityCam, where
+        /// it meant streaming on open); MigrateSettingKeys moves it once.</summary>
+        private const string LiveOnOpenKey = "LiveOnOpen";
 
         /// <summary>Constructor part: saved settings into the recorder and the controls.</summary>
+        /// <summary>Renamed settings keys, moved once: "AutoStart" (W10MSecurityCam's name) is now "LiveOnOpen".</summary>
+        private void MigrateSettingKeys()
+        {
+            if (_settings.Values["AutoStart"] is bool old)
+            {
+                if (!(_settings.Values[LiveOnOpenKey] is bool)) _settings.Values[LiveOnOpenKey] = old;
+                _settings.Values.Remove("AutoStart");
+            }
+        }
+
         private void LoadRecordingSettings()
         {
+            MigrateSettingKeys();
             _recorder.Log = Log;
             _recorder.Enabled = false; // switched on by the start-up logic (Record when the app opens) or the button
             int seg = _settings.Values["RecSegmentMin"] is int sm ? sm : 3;
@@ -612,7 +626,7 @@ namespace W10MDashcam
             }
             if (form.TryGetValue("liveonopen", out var loo))
             {
-                _settings.Values["AutoStart"] = IsOn(loo);
+                _settings.Values[LiveOnOpenKey] = IsOn(loo);
                 done.Add("live view when the app opens " + (LiveOnOpen ? "on" : "off"));
                 uiChange = true;
             }

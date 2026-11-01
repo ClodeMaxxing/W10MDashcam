@@ -252,7 +252,7 @@ namespace W10MDashcam
                 _settings.Values.Remove("Bitrate");
                 if (_settings.Values["Keyframe"] is int kf && kf >= 0 && kf < KeyframeBox.Items.Count)
                     KeyframeBox.SelectedIndex = kf;
-                AutoStartToggle.IsOn = _settings.Values["AutoStart"] is bool b0 && b0; // live view is off unless chosen
+                AutoStartToggle.IsOn = LiveOnOpen; // live view is off unless chosen
                 PowerSaveToggle.IsOn = !(_settings.Values["PowerSave"] is bool b1) || b1;
 
                 bool crashedLastTime = _settings.Values["StartInProgress"] is bool sip && sip;
@@ -663,7 +663,7 @@ namespace W10MDashcam
 
         private void AutoStartToggle_Toggled(object sender, RoutedEventArgs e)
         {
-            _settings.Values["AutoStart"] = AutoStartToggle.IsOn;
+            _settings.Values[LiveOnOpenKey] = AutoStartToggle.IsOn;
         }
 
 
