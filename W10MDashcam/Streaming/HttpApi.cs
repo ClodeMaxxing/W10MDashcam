@@ -129,8 +129,12 @@ namespace W10MDashcam.Streaming
                     {
                         string refused = RefuseForeignPost(r);
                         if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
-                        var form = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
+                        var form = ParseForm(r.Body); // changes only in the body, never in the URL
                         string note = StripSavedLimits(form);
+                        // As on the web page: a login change needs the current password too ("current" field).
+                        string loginNote = CheckCurrentPassword(form, form);
+                        if (loginNote != null) note = note == null ? loginNote : note + " " + loginNote;
+                        form.Remove("current");
                         string result = form.Count > 0 ? await ApplyConfig(form) : "";
                         if (note != null) result = note + (result.Length > 0 ? "\n" + result : "");
                         return Reply(200, "OK", "text/plain; charset=utf-8", result + "\n\n" + GetConfig());
@@ -166,7 +170,7 @@ namespace W10MDashcam.Streaming
                     return Reply(403, "Forbidden", "text/plain", "Changes need the login\n");
                 string refused = RefuseForeignPost(r);
                 if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
-                var all = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
+                var all = ParseForm(r.Body); // changes only in the body, never in the URL
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "record", "segment", "storage", "saveclip", "resume", "testincident", "powerloss", "testpowerloss", "log", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved", "gps", "units", "subtitles" })
                     if (all.TryGetValue(k, out var v)) only[k] = v;
@@ -180,7 +184,8 @@ namespace W10MDashcam.Streaming
             if (result != null)
             {
                 string first = result.Split('\n')[0].Replace("\\", "\\\\").Replace("\"", "\\\"");
-                json = json.Substring(0, json.LastIndexOf('}')) + ",\"result\":\"" + first + "\"}"; // only the outer brace: the JSON has nested objects
+                int end = json.LastIndexOf('}'); // only the outer brace: the JSON has nested objects
+                if (end > 0) json = json.Substring(0, end) + ",\"result\":\"" + first + "\"}";
             }
             if (json.StartsWith("{")) json = "{\"canWrite\":" + (canWrite ? "true" : "false") + ",\"loginSet\":" + (loginSet ? "true" : "false")
                 + ",\"defaultLogin\":" + (Auth != null && Auth.IsDefault ? "true" : "false") + ",\"user\":\"" + (Auth != null ? Auth.UserName.Replace("\\", "").Replace("\"", "") : "") + "\"" + (json.Length > 2 ? "," : "") + json.Substring(1);
@@ -216,7 +221,7 @@ namespace W10MDashcam.Streaming
                 Recorder.SaveClip();
                 return Reply(200, "OK", "text/plain", "Saving the clip\n");
             }
-            var form = ParseForm(r.Body.Length > 0 ? r.Body : r.Query);
+            var form = ParseForm(r.Body); // changes only in the body, never in the URL
             bool touchesSaved = path == "/recordings/unlock"
                 || ((path == "/recordings/delete" || path == "/recordings/deleteall") && form.TryGetValue("saved", out var s0) && s0 == "1");
             if (touchesSaved && !AllowDeleteSaved) return Reply(403, "Forbidden", "text/plain", SavedLockedText + "\n");

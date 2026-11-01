@@ -26,6 +26,8 @@ try {
   }
   $wc.Headers.Add('Content-Type', 'application/x-www-form-urlencoded')
   $wc.Headers.Add('X-Requested-With', 'W10MDashcam') # the phone refuses changes without it
+  # Since 0.8.1 a login change also needs the current password: it is the login this script signs in with.
+  if ($Body -match '(^|&)(user|password)=' -and $Body -notmatch '(^|&)current=') { $Body += '&current=' + [Uri]::EscapeDataString($Password) }
   $r = $wc.UploadString($url, 'POST', $Body)
   Write-Host $r
   $r | Out-File (Join-Path $PSScriptRoot 'config-result.txt') -Encoding utf8
