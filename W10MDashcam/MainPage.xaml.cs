@@ -166,6 +166,7 @@ namespace W10MDashcam
                 if (!e.Visible) Log("App hidden (screen locked or switched away)");
                 else _recorder.ReturnToSd(); // back from formatting the card in Settings (if the app was not suspended)
             };
+            NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
 
             _highBw = _settings.Values["HighBandwidth"] is bool hb0 && hb0;
             HighBwToggle.IsOn = _highBw;
@@ -331,12 +332,31 @@ namespace W10MDashcam
                 .Where(ip => !ip.StartsWith("169.254.")) // link-local addresses aren't reachable from the PC
                 .ToList();
             _ips = ips;
+            _shownIps = string.Join(",", ips);
             UpdateServerUi(); // the web page addresses (or "off")
             var lines = ips.Select(ip => "rtsp://" + ip + ":" + RtspPort + StreamPath).ToList();
             lines.Add("USB: rtsp://127.0.0.1:" + UsbPort + StreamPath);
             AddressText.Text = string.Join("\n", lines);
             UpdateLoginUi();
             Log("Addresses: " + string.Join("  ", lines) + (ips.Count > 0 ? "  (log: http://" + ips[0] + ":" + LogPort + ")" : ""));
+        }
+
+        private string _shownIps = "";
+
+        /// <summary>A new DHCP lease or another Wi-Fi network: the shown addresses follow (from W10MWebCam).</summary>
+        private void OnNetworkStatusChanged(object sender)
+        {
+            var _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                try
+                {
+                    string ips = string.Join(",", NetworkInformation.GetHostNames()
+                        .Where(h => h.Type == HostNameType.Ipv4 && h.IPInformation != null)
+                        .Select(h => h.CanonicalName).Where(ip => !ip.StartsWith("169.254.")));
+                    if (ips != _shownIps && AddressText != null) ShowAddresses();
+                }
+                catch (Exception ex) { Log("Network change: " + ex.Message); }
+            });
         }
 
         // ------------------------------------------------------------------ start / stop
