@@ -87,8 +87,12 @@ namespace W10MDashcam.Streaming
         private static byte[] SwitchedOff(string what) =>
             Reply(403, "Forbidden", "text/plain", "The " + what + (what.EndsWith("s") ? " are" : " is") + " switched off. Switch " + (what.EndsWith("s") ? "them" : "it") + " on on the phone (Network and login)" + (what == "web page" ? "" : " or on the settings page") + ".\n");
 
+        /// <summary>When a request last came in over the USB cable (127.0.0.1): the phone's only sign that USB is connected.</summary>
+        public DateTime LastUsbRequest = DateTime.MinValue;
+
         public async Task<byte[]> HandleAsync(HttpRequest r)
         {
+            if (r.FromUsb) LastUsbRequest = DateTime.Now;
             try
             {
                 if (!WebEnabled) return WebOff();
@@ -197,7 +201,7 @@ namespace W10MDashcam.Streaming
                 if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
                 var all = ParseForm(r.Body); // changes only in the body, never in the URL
                 var only = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "preview", "keeppreview", "record", "segment", "storage", "saveclip", "resume", "testincident", "powerloss", "testpowerloss", "log", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved", "gps", "units", "subtitles" })
+                foreach (var k in new[] { "camera", "focus", "exposure", "wb", "format", "bitrate", "highbw", "powersave", "stream", "engine", "user", "password", "savepower", "saveois", "savefocus", "probe", "torch", "preview", "keeppreview", "heatprotect", "autostart", "keyframe", "audio", "udp", "snapshot", "record", "segment", "storage", "saveclip", "resume", "testincident", "powerloss", "testpowerloss", "log", "recordonopen", "live", "liveonopen", "location", "impact", "keepnext", "savedlimit", "replacesaved", "gps", "units", "subtitles" })
                     if (all.TryGetValue(k, out var v)) only[k] = v;
                 string note = StripSavedLimits(only);
                 string bad = CheckLoginFields(only) ?? CheckCurrentPassword(only, all);

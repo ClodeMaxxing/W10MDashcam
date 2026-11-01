@@ -118,6 +118,7 @@ namespace W10MDashcam
             StartLogWriter();
             LaunchSelfCheck();
             InitializeComponent();
+            _uiReady = true; // switches with IsOn="True" in the XAML fire their handlers during InitializeComponent, before later controls exist
 
             VersionText.Text = "v" + AppVersion;
 
@@ -251,6 +252,8 @@ namespace W10MDashcam
                     KeyframeBox.SelectedIndex = kf;
                 AutoStartToggle.IsOn = LiveOnOpen; // live view is off unless chosen
                 LoadDisplaySettings();
+                LoadHeatProtectSetting();
+                UpdatePickTexts();
 
                 bool crashedLastTime = _settings.Values["StartInProgress"] is bool sip && sip;
                 ApplyStartupWishes(crashedLastTime); // Record / Live when the app opens
@@ -358,8 +361,25 @@ namespace W10MDashcam
         // ------------------------------------------------------------------ start / stop
 
 
+        /// <summary>The bitrate a resolution gets by default: 24 Mbps above 1080p, 4 Mbps at 1080p or below.</summary>
+        private static uint DefaultBitrateMbps(FormatOption f) => f != null && f.Height > 1080 ? 24u : 4u;
+
+        private void SelectBitrate(uint mbps)
+        {
+            foreach (var item in BitrateBox.Items)
+                if (item is BitrateOption b && b.Bps == mbps * 1000000u) { BitrateBox.SelectedItem = b; return; }
+        }
+
         private async void Setting_Changed(object sender, SelectionChangedEventArgs e)
         {
+            UpdatePickTexts();
+            if (!_applyingSettings && sender == ResolutionBox && ResolutionBox.SelectedItem is FormatOption nf && BitrateBox.SelectedItem is BitrateOption cb && cb.Bps != 0)
+            {
+                // a resolution above 1080p gets 24 Mbps unless more was chosen; back at 1080p or below, 24 goes back to 4
+                uint want = DefaultBitrateMbps(nf);
+                bool change = nf.Height > 1080 ? cb.Bps < want * 1000000u : cb.Bps == 24000000u;
+                if (change) { _applyingSettings = true; SelectBitrate(want); _applyingSettings = false; Log("Bitrate set to " + want + " Mbps for " + FormatKey(nf)); }
+            }
             if (!_applyingSettings) SyncVideoKeys();
             if (_applyingSettings) return; // a USB config change restarts the stream once, itself
             if (_camera == null || !_camera.IsStreaming || _busy) return;
@@ -473,14 +493,28 @@ namespace W10MDashcam
         private bool PanelOnScreen => _recorder.Halted || PowerLossShowing;
 
         /// <summary>Folding section headers: Tag is "PanelName|LABEL".</summary>
-        private void Fold_Click(object sender, RoutedEventArgs e)
+        /// <summary>A tap on a RowSwitch row flips its ToggleSwitch (the template has no knob, so the switch does not toggle by itself).</summary>
+        private void RowSwitch_Tapped(object sender, Windows.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            var b = (Button)sender;
-            var parts = ((string)b.Tag).Split('|');
-            if (!(FindName(parts[0]) is UIElement panel)) return;
-            bool open = panel.Visibility != Visibility.Visible;
-            panel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-            b.Content = parts[1] + (open ? "  ▾" : "  ▸");
+            DependencyObject n = sender as DependencyObject;
+            while (n != null && !(n is ToggleSwitch)) n = Windows.UI.Xaml.Media.VisualTreeHelper.GetParent(n);
+            if (n is ToggleSwitch sw && sw.IsEnabled) { sw.IsOn = !sw.IsOn; e.Handled = true; }
+        }
+
+        /// <summary>A drawer's header band: Tag = "PanelName|ArrowName". Open = the body shows and the band keeps only its top corners round.</summary>
+        private void Fold_Tapped(object sender, Windows.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            var head = (Border)sender;
+            if (!(FindName(((string)head.Tag).Split('|')[0]) is UIElement panel)) return;
+            SetFold(head, panel.Visibility != Visibility.Visible);
+        }
+
+        private void SetFold(Border head, bool open)
+        {
+            var parts = ((string)head.Tag).Split('|');
+            if (FindName(parts[0]) is UIElement panel) panel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            if (FindName(parts[1]) is TextBlock arrow) arrow.Text = open ? "▾" : "▸";
+            head.CornerRadius = open ? new CornerRadius(8, 8, 0, 0) : new CornerRadius(8);
         }
 
         /// <summary>Any touch on the page (handled or not) keeps a woken screen awake and a shown picture showing; crash detection ignores jolts within 2 s of it.</summary>
@@ -515,6 +549,7 @@ namespace W10MDashcam
             {
                 if (_camera == null || !_camera.IsStreaming) { _torchWanted = false; LoadTorchUi(); }
                 else if (DateTime.Now >= _torchOffAt) { SetTorch(false); Log("Flashlight switched off automatically (time limit)"); }
+                else UpdateTorchButton(); // the seconds left
             }
             if (tick % 10 == 0)
             {
@@ -573,37 +608,51 @@ namespace W10MDashcam
 
         private string _resLabelKey, _resLabel; // the resolution pill ("4K30") for _currentFormatKey
 
-        /// <summary>The status card: dot and state, resolution and viewer pills, big fps / Mbps, engine line.</summary>
+        /// <summary>The status card: the live view's three tiles (fps, Mbps, viewers), the format pill on the recording row, the Live view bar, the tiles.</summary>
         private void UpdateStatusCard(bool streaming)
         {
             int viewers = _server.ClientCount;
-            long lat = streaming && viewers > 0 && _camera != null ? _camera.LastLatencyMs : -1; // only matters to someone watching
-            ViewersText.Text = viewers + (viewers == 1 ? " viewer" : " viewers") + (lat >= 0 ? " · " + lat + " ms" : "");
-            StateText.Text = _protect ? "HEAT PROTECTION" : !streaming ? "STOPPED"
-                : _recorder.Enabled ? (_wantLive ? "REC + LIVE" : "RECORDING") : "LIVE ONLY";
-            StateText.Foreground = _protect ? Brush(0xFF, 0x6B, 0x6B) : Brush(0x9C, 0xF0, 0xB0);
-            StatusDot.Fill = _protect ? Brush(0xFF, 0x55, 0x55) : streaming ? Brush(0x39, 0xFF, 0x14) : Brush(0x55, 0x55, 0x55);
+            bool live = streaming && _wantLive;
             if (_resLabelKey != _currentFormatKey)
             {
                 _resLabelKey = _currentFormatKey; // parsed again only when the format changes
                 var m = System.Text.RegularExpressions.Regex.Match(_currentFormatKey ?? "", @"^(\d+)x(\d+)@(\d+)");
                 _resLabel = m.Success ? (int.Parse(m.Groups[2].Value) >= 2160 ? "4K" : m.Groups[2].Value + "p") + m.Groups[3].Value : null;
             }
-            ResPill.Visibility = streaming && _resLabel != null ? Visibility.Visible : Visibility.Collapsed;
-            if (_resLabel != null) ResText.Text = _resLabel
-                + (_camera != null && !_camera.UseNativeSink ? " SAFE" : ""); // the fallback engine (1080p at most)
-            StatsText.Visibility = streaming ? Visibility.Visible : Visibility.Collapsed;
-            if (streaming) StatsText.Text = string.Format("{0,2:0} fps {1,4:0.0} Mbps", _camera.Fps, _camera.Mbps);
+            var dim = Brush(0x7F, 0xAE, 0x86); var bright = Brush(0xFF, 0xFF, 0xFF);
+            FpsTileText.Text = live ? _camera.Fps.ToString("0") : "-";
+            MbpsTileText.Text = live ? _camera.Mbps.ToString("0.0") : "-";
+            ViewersText.Text = live ? viewers.ToString() : "-";
+            FpsTileText.Foreground = MbpsTileText.Foreground = ViewersText.Foreground = live ? bright : dim;
+            // the format pill on the recording row: lit while the camera runs, the chosen format dimmed while stopped
+            ResText.Text = (_resLabel ?? "-") + (_camera != null && !_camera.UseNativeSink ? " SAFE" : "");
+            ResText.Foreground = streaming ? Brush(0xCF, 0xFF, 0xD2) : dim;
+            ResPill.BorderBrush = streaming ? GreenFill : Brush(0x2A, 0x4A, 0x32);
             NormalModeButton.Visibility = _camera != null && !_camera.UseNativeSink ? Visibility.Visible : Visibility.Collapsed; // safe mode: the way back
+            UpdateServicePills(streaming);
+            UpdateViewerSetup();
+            UpdateRunButtons();
             if (!_blackedOut || BlackoutOverlay.Visibility != Visibility.Visible) UpdateTiles(streaming); // nobody sees them under the black overlay
-            // the pulse only runs while someone can see it
-            bool pulse = streaming && !_blackedOut;
+            // the recording light pulses only while someone can see it
+            bool pulse = _recorder.State == "recording" && !_blackedOut;
             if (pulse != _dotPulsing)
             {
                 _dotPulsing = pulse;
-                if (pulse) DotPulse.Begin(); else { DotPulse.Stop(); StatusDot.Opacity = 1; }
+                if (pulse) DotPulse.Begin(); else { DotPulse.Stop(); RecDot.Opacity = 1; }
             }
         }
+
+        /// <summary>The Live view bar button: green with the viewer count while the RTSP live view is on.</summary>
+        private void UpdateStreamButton(bool live)
+        {
+            if (LiveBar == null) return;
+            bool running = live && _camera != null && _camera.IsStreaming;
+            LiveBar.Background = live ? GreenFill : Brush(0x16, 0x30, 0x1E);
+            LiveStateText.Foreground = live ? GreenFill : Brush(0x7F, 0xAE, 0x86);
+            int n = _server.ClientCount;
+            LiveStateText.Text = !live ? "OFF" : !running ? "ON · STARTING" : n > 0 ? "ON · " + n + (n == 1 ? " VIEWER" : " VIEWERS") : "ON";
+        }
+
 
         private static readonly Windows.UI.Xaml.Media.SolidColorBrush GreenFill = Brush(0x39, 0xFF, 0x14), AmberFill = Brush(0xE8, 0xD0, 0x40),
             RedFill = Brush(0xFF, 0x55, 0x55), OffFill = Brush(0x16, 0x30, 0x1E);
@@ -719,6 +768,30 @@ namespace W10MDashcam
 
         // ------------------------------------------------------------------ login
 
+        /// <summary>The Viewer setup drawer: addresses and the lines for an NVR, VLC, OBS and ffplay, from the live state (once a second, only rewritten when changed).</summary>
+        private string _viewerKey = "";
+        private void UpdateViewerSetup()
+        {
+            if (ViewerAddrText == null) return;
+            string ip = _ips.Count > 0 ? _ips[0] : null;
+            string lg = _server.Auth.Enabled ? "USER:PASSWORD@" : "";
+            string wr = ip != null ? "rtsp://" + lg + ip + ":" + RtspPort + StreamPath : "(no Wi-Fi)";
+            string ur = "rtsp://" + lg + "127.0.0.1:" + UsbPort + StreamPath;
+            string best = ip != null ? wr : ur;
+            bool udp = _server.AllowUdp;
+            string kf = (KeyframeBox.SelectedItem as KeyframeOption)?.Seconds.ToString() ?? "2";
+            string web = ip != null ? ip + ":" + LogPort : "127.0.0.1:" + UsbPort;
+            string key = wr + ur + udp + kf + _snapshotsOn + _server.Auth.IsDefault;
+            if (key == _viewerKey) return;
+            _viewerKey = key;
+            ViewerAddrText.Text = "Wi-Fi  " + wr + "\nUSB    " + ur;
+            ViewerNvrText.Text = "Add a camera of type RTSP / generic / FFmpeg with the address above.\nTransport: TCP" + (udp ? " (UDP is allowed too)" : "") + ". Login: the stream login" + (_server.Auth.IsDefault ? " (admin / admin until changed)" : "") + ".\nKeyframe every " + kf + " s: recordings cut at keyframes.";
+            ViewerVlcText.Text = "Media > Open Network Stream, paste the address.\nOr: vlc " + (udp ? "" : "--rtsp-tcp ") + best;
+            ViewerObsText.Text = "Add a Media Source, untick Local File, then\nInput\n  " + best + "\nInput format\n  rtsp\nFFmpeg options\n  rtsp_transport=tcp fflags=nobuffer flags=low_delay\nThen Start Virtual Camera and pick OBS Virtual Camera in your video app.";
+            ViewerFfplayText.Text = "ffplay" + (udp ? "" : " -rtsp_transport tcp") + " -fflags nobuffer -flags low_delay " + best;
+            ViewerSnapText.Text = _snapshotsOn ? "http://" + web + "/snapshot.jpg  (login needed)" : "Switch Snapshots on under Network and login; then\nhttp://" + web + "/snapshot.jpg";
+        }
+
         private void UpdateLoginUi()
         {
             if (LoginStatusText == null) return;
@@ -811,7 +884,25 @@ namespace W10MDashcam
                     : "Switches off by itself after 30 seconds.";
             }
             finally { _loadingTorchUi = false; }
+            UpdateTorchButton();
         }
+
+        /// <summary>The Flashlight light-bar button: lit with the seconds left while on; the reason it can't be used while off.</summary>
+        private void UpdateTorchButton()
+        {
+            if (TorchBar == null) return;
+            bool streaming = _camera != null && _camera.IsStreaming;
+            TorchButton.IsEnabled = TorchToggle.IsEnabled;
+            TorchBar.Background = _torchWanted ? GreenFill : Brush(0x16, 0x30, 0x1E);
+            TorchStateText.Foreground = _torchWanted ? GreenFill : Brush(0x7F, 0xAE, 0x86);
+            int left = _torchWanted ? Math.Max(0, (int)Math.Ceiling((_torchOffAt - DateTime.Now).TotalSeconds)) : 0;
+            TorchStateText.Text = _torchWanted ? "ON · " + left + " s"
+                : _protect ? "OFF · HEAT PROTECTION"
+                : _camera != null && !_tuning.TorchSupported && streaming ? "OFF · NOT ON THIS CAMERA"
+                : !streaming ? "OFF · STREAM FIRST" : "OFF";
+        }
+
+        private void TorchButton_Click(object sender, RoutedEventArgs e) => SetTorch(!_torchWanted);
 
         private void ApplyTorch()
         {
@@ -867,11 +958,12 @@ namespace W10MDashcam
             try
             {
                 SaveAllCheck.IsOn = _tuning.SaveAll;
-                SavePanel.Visibility = _tuning.SaveAll ? Visibility.Collapsed : Visibility.Visible;
                 SaveOisCheck.IsOn = _tuning.SaveOis;
                 SaveFocusCheck.IsOn = _tuning.SaveFocus;
                 // Not every camera offers every mode; say so instead of ticking something that does nothing.
                 SaveOisCheck.IsEnabled = _tuning.OisSupported || _camera == null;
+                // the visible switch (Camera): Image stabilization on = SaveOis (stabilization off) false
+                if (OisToggle != null) { OisToggle.IsOn = !_tuning.SaveOis; OisToggle.IsEnabled = SaveOisCheck.IsEnabled; }
             }
             finally { _loadingSaveUi = false; }
         }
@@ -880,6 +972,14 @@ namespace W10MDashcam
         {
             if (_loadingSaveUi) return;
             _tuning.SaveAll = SaveAllCheck.IsOn;
+            PowerChangedFromUi();
+        }
+
+        /// <summary>Image stabilization (Camera): off saves processing and heat on a fixed mount (one stream restart).</summary>
+        private void OisToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (_loadingSaveUi) return;
+            _tuning.SaveOis = !OisToggle.IsOn;
             PowerChangedFromUi();
         }
 
@@ -1012,17 +1112,88 @@ namespace W10MDashcam
                 UpdateTuningLabels();
             }
             finally { _loadingTuningUi = false; }
+            UpdateFocusOnceRow();
         }
 
+        /// <summary>The value line of each camera tile: the value (dim while automatic) and a small note beside it.</summary>
         private void UpdateTuningLabels()
         {
-            FocusLabel.Text = !_tuning.FocusSupported ? "Focus: not adjustable"
-                : _tuning.FocusAuto ? "Focus: automatic" : "Focus: " + Math.Round(_tuning.FocusPercent) + " (0 near - 100 far)";
-            ExposureLabel.Text = !_tuning.ExposureSupported ? "Exposure: not adjustable"
-                : _tuning.ExposureAuto ? "Exposure: automatic"
-                : string.Format("Exposure: {0:0.##} ms (1/{1:0} s)", _tuning.ExposureMs, 1000.0 / Math.Max(0.001, _tuning.ExposureMs));
-            WbLabel.Text = !_tuning.WhiteBalanceSupported ? "White balance: not adjustable"
-                : _tuning.WbAuto ? "White balance: automatic" : "White balance: " + _tuning.WhiteBalanceKelvin + " K";
+            var bright = Brush(0xFF, 0xFF, 0xFF); var dim = Brush(0x7F, 0xAE, 0x86);
+            string iso = System.Text.RegularExpressions.Regex.Match(_tuning.State ?? "", @"ISO (\d+)").Groups[1].Value;
+            string expNow = string.Format("{0:0.##} ms (1/{1:0} s)", _tuning.ExposureMs, 1000.0 / Math.Max(0.001, _tuning.ExposureMs));
+            FocusLabel.Text = !_tuning.FocusSupported ? "n/a" : _tuning.FocusAuto ? "auto" : Math.Round(_tuning.FocusPercent).ToString();
+            FocusNote.Text = !_tuning.FocusSupported ? "not adjustable" : _tuning.FocusHeld ? "held, lens parked" : _tuning.FocusAuto ? "continuous" : _focusLockedByOnce ? "locked · 0 near, 100 far" : "0 near, 100 far";
+            ExposureLabel.Text = !_tuning.ExposureSupported ? "n/a" : _tuning.ExposureAuto ? "auto" : string.Format("{0:0.##} ms", _tuning.ExposureMs);
+            ExposureNote.Text = !_tuning.ExposureSupported ? "not adjustable" : (_tuning.ExposureAuto ? expNow : string.Format("1/{0:0} s", 1000.0 / Math.Max(0.001, _tuning.ExposureMs))) + (iso.Length > 0 ? " · ISO " + iso : "") + (_tuning.ExposureAuto ? " now" : "");
+            WbLabel.Text = !_tuning.WhiteBalanceSupported ? "n/a" : _tuning.WbAuto ? "auto" : _tuning.WhiteBalanceKelvin + " K";
+            WbNote.Text = !_tuning.WhiteBalanceSupported ? "not adjustable" : _tuning.WbAuto ? _tuning.WhiteBalanceKelvin + " K now" : "";
+            FocusLabel.Foreground = _tuning.FocusAuto ? dim : bright;
+            ExposureLabel.Foreground = _tuning.ExposureAuto ? dim : bright;
+            WbLabel.Foreground = _tuning.WbAuto ? dim : bright;
+            SetSeg(FocusSegA, FocusSegM, _tuning.FocusAuto);
+            SetSeg(ExposureSegA, ExposureSegM, _tuning.ExposureAuto);
+            SetSeg(WbSegA, WbSegM, _tuning.WbAuto);
+        }
+
+        /// <summary>Colours the active half of an Auto / Manual segment.</summary>
+        private static void SetSeg(Border a, Border m, bool auto)
+        {
+            var on = Brush(0x1F, 0x3A, 0x26); var off = Brush(0x0A, 0x16, 0x0D);
+            var onText = Brush(0xCF, 0xFF, 0xD2); var offText = Brush(0x7F, 0xAE, 0x86);
+            a.Background = auto ? on : off; m.Background = auto ? off : on;
+            ((TextBlock)a.Child).Foreground = auto ? onText : offText;
+            ((TextBlock)m.Child).Foreground = auto ? offText : onText;
+        }
+
+        /// <summary>A tap on a segment flips the hidden switch it names (Tag), whose handler does the rest.</summary>
+        private void Seg_Tapped(object sender, Windows.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            if (FindName((string)((Border)sender).Tag) is ToggleSwitch sw && sw.IsEnabled) sw.IsOn = !sw.IsOn;
+        }
+
+        // ---- the pickers: a tile opens a themed list of the hidden ComboBox's items; a tap on a row selects it in the ComboBox.
+        // (public with properties: {Binding} in the row template needs reflectable properties, also under .NET Native)
+
+        private void Pick_Click(object sender, RoutedEventArgs e)
+        {
+            var button = (Button)sender;
+            if (!(FindName((string)button.Tag) is ComboBox box)) return;
+            var rows = new List<PickRowItem>();
+            foreach (var item in box.Items)
+            {
+                bool cur = ReferenceEquals(item, box.SelectedItem);
+                rows.Add(new PickRowItem
+                {
+                    Value = item, Text = item.ToString(),
+                    Light = cur ? GreenFill : Brush(0x07, 0x11, 0x09),
+                    Fore = cur ? Brush(0xCF, 0xFF, 0xD2) : Brush(0x9C, 0xC3, 0xA2),
+                    Back = cur ? Brush(0x16, 0x3A, 0x1E) : Brush(0x07, 0x11, 0x09)
+                });
+            }
+            var list = new ListView
+            {
+                ItemsSource = rows, IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.None,
+                ItemTemplate = (DataTemplate)Resources["PickRow"], ItemContainerStyle = (Style)Resources["PickItem"], Tag = box
+            };
+            var flyout = new Flyout { Content = list, Placement = Windows.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Bottom, FlyoutPresenterStyle = (Style)Resources["PickFlyout"] };
+            list.ItemClick += (s, a) =>
+            {
+                if (a.ClickedItem is PickRowItem r) box.SelectedItem = r.Value; // Setting_Changed applies it
+                flyout.Hide();
+            };
+            flyout.ShowAt(button);
+        }
+
+        /// <summary>The value shown on each picker tile (after every selection change and at start).</summary>
+        private void UpdatePickTexts()
+        {
+            if (ResolutionPickText == null) return;
+            ResolutionPickText.Text = ResolutionBox.SelectedItem?.ToString() ?? "-";
+            BitratePickText.Text = BitrateBox.SelectedItem?.ToString() ?? "-";
+            KeyframePickText.Text = KeyframeBox.SelectedItem?.ToString() ?? "-";
+            ResolutionPick.IsEnabled = ResolutionBox.IsEnabled; BitratePick.IsEnabled = BitrateBox.IsEnabled; KeyframePick.IsEnabled = KeyframeBox.IsEnabled;
+            PowerLossPickText.Text = PowerLossBox.SelectedItem?.ToString() ?? "-"; SegmentPickText.Text = SegmentBox.SelectedItem?.ToString() ?? "-"; ImpactPickText.Text = ImpactBox.SelectedItem?.ToString() ?? "-";
+            UnitsPickText.Text = UnitsBox.SelectedItem?.ToString() ?? "-"; LocationPickText.Text = LocationBox.SelectedItem?.ToString() ?? "-"; LimitPickText.Text = LimitBox.SelectedItem?.ToString() ?? "-"; SavedLimitPickText.Text = SavedLimitBox.SelectedItem?.ToString() ?? "-";
         }
 
         private void AutoCameraCheck_Changed(object sender, RoutedEventArgs e)
@@ -1046,7 +1217,38 @@ namespace W10MDashcam
             TuningChangedFromUi(); // all three on Auto ticks the main box and hides the panel
         }
 
-        private async void FocusOnceButton_Click(object sender, RoutedEventArgs e) { TouchPhoneAdjust(); await FocusOnceAsync(); }
+        /// <summary>The Focus once row: off = autofocus once and lock there; on (locked, or held by the power-saving hold) = release to continuous autofocus.</summary>
+        private async void FocusOnceButton_Click(object sender, RoutedEventArgs e)
+        {
+            TouchPhoneAdjust();
+            if (FocusOnceOn) { await ReleaseFocusAsync(); return; }
+            await FocusOnceAsync();
+        }
+
+        private bool _focusLockedByOnce; // the lock came from Focus once (a manual focus the person set by hand is not "locked")
+        private bool FocusOnceOn => _tuning.FocusSupported && (_tuning.FocusHeld || (!_tuning.FocusAuto && _focusLockedByOnce));
+
+        private void UpdateFocusOnceRow()
+        {
+            if (FocusOnceBar == null) return;
+            bool on = FocusOnceOn;
+            FocusOnceButton.IsEnabled = _tuning.FocusSupported && _camera != null;
+            FocusOnceBar.Background = on ? GreenFill : Brush(0x16, 0x30, 0x1E);
+            FocusOnceStateText.Foreground = on ? GreenFill : Brush(0x7F, 0xAE, 0x86);
+            FocusOnceStateText.Text = !_tuning.FocusSupported ? "NOT ADJUSTABLE" : _tuning.FocusHeld ? "ON · HELD" : on ? "ON · LOCKED" : "OFF";
+        }
+
+        /// <summary>Back to continuous autofocus (after a lock or a hold).</summary>
+        private async Task ReleaseFocusAsync()
+        {
+            _focusLockedByOnce = false;
+            _tuning.ReleaseFocusHold();
+            _tuning.FocusAuto = true;
+            SaveTuning();
+            LoadTuningUi();
+            Log("Focus released: continuous autofocus again");
+            await ApplyTuningAsync();
+        }
 
         /// <summary>Autofocus once, then hold that focus (manual at the found position).</summary>
         private async Task FocusOnceAsync()
@@ -1056,19 +1258,22 @@ namespace W10MDashcam
             _settings.Values["TuningInProgress"] = true;
             try
             {
-                await _tuning.FocusOnceAsync(_camera.Capture);
+                _tuning.ReleaseFocusHold();
+                bool ok = await _tuning.FocusOnceAsync(_camera.Capture);
+                _focusLockedByOnce = ok;
                 _settings.Values["TuningInProgress"] = false;
                 SaveTuning();
                 LoadTuningUi();
                 await ApplyDisplayAsync();
                 await ApplyTuningAsync();
             }
-            finally { FocusOnceButton.IsEnabled = true; }
+            finally { FocusOnceButton.IsEnabled = true; UpdateFocusOnceRow(); }
         }
 
         private void TuningChangedFromUi()
         {
             TouchPhoneAdjust();
+            _focusLockedByOnce = false; // a focus set by hand is not the Focus once lock
             LoadTuningUi();
             SaveTuning();
             var _ = ApplyDisplayAsync();
@@ -1171,15 +1376,24 @@ namespace W10MDashcam
             _pausedSecs = paused ? _pausedSecs + 1 : 0;
             _chargingSecs = charging ? _chargingSecs + 1 : 0;
             // 20 s of paused charging = hot (a brief pause is not); back to normal after 30 s of charging again.
-            if (!_protect && _pausedSecs >= 20) { var _e = EnterProtectionAsync(); }
+            // Heat protection off (Power): the phone is left alone, hot or not - the person was warned the battery drains.
+            if (!_protect && _pausedSecs >= 20 && _heatProtectOn) { var _e = EnterProtectionAsync(); }
             else if (_protect && _chargingSecs >= 30 && (DateTime.Now - _protectSince).TotalMinutes >= 3) { var _x = LeaveProtectionAsync(); }
             else if (_protectRestartOwed && !_protectBusy && !_busy) { var _r = RestartStreamForProtectionAsync(); }
             _heatWarn = paused || _protect;
             // A brief pause is only a caution (amber); 20 s of it is hot (red), as on the Temp badge (HeatBadge).
-            _heat = _protect ? "Heat protection on" : _pausedSecs >= 20 ? "Hot (charging paused)" : paused ? "Charging paused" : "Healthy";
+            _heat = _protect ? "Heat protection on" : HotUnprotected ? "HOT - heat protection off" : _pausedSecs >= 20 ? "Hot (charging paused)" : paused ? "Charging paused" : "Healthy";
+            if (HotUnprotected != _hotUnprotectedShown)
+            {
+                _hotUnprotectedShown = HotUnprotected;
+                if (HotUnprotected) { Log("HOT with heat protection OFF: nothing is done about it (switch it on under Power, or use a 2 A charger)"); PlayChime(false); var buzz = BuzzAsync(2); }
+                else Log("Charging again: the phone has cooled (heat protection still off)");
+                UpdateProtectUi();
+            }
             // The usual cause is a power source that can't keep up (a PC USB port, a small car adapter): the phone then also
             // draws on its battery, the battery heats, and Windows pauses charging. So the messages point at the charger too.
             _heatDetail = _protect ? "Heat protection: charging paused because the phone is hot - usually the charger can't keep up (a PC USB port or a small adapter; use 2 A or more). Video is 1080p / 6 Mbps and power saving is on until it charges normally again."
+                : HotUnprotected ? "The phone is hot (charging has paused) and heat protection is OFF, so nothing is done about it: full video and the screen as set. Switch heat protection on under Power, lower the video yourself, or use a 2 A charger - on a weak charger the battery drains until the phone dies."
                 : paused ? "Charging has paused: the phone is probably hot - usually the charger can't keep up (a PC USB port or a small adapter; use 2 A or more)." : "";
         }
 
@@ -1187,6 +1401,54 @@ namespace W10MDashcam
         // flashlight; put the person's own settings back once charging resumes. The forced values are never written to the
         // saved settings, so an app restart in between also comes back with the person's own choices.
         private bool _protect, _protectBusy, _protectRestartOwed;
+        /// <summary>Hot (20 s of paused charging on a good charger) while the Heat protection switch is off.</summary>
+        private bool HotUnprotected => !_protect && !_heatProtectOn && _pausedSecs >= 20;
+        private bool _hotUnprotectedShown;
+
+        private bool _heatProtectOn = true, _loadingHeatUi, _uiReady; // the Heat protection switch (Power); off = never enter protection
+
+        private void LoadHeatProtectSetting()
+        {
+            _heatProtectOn = !(_settings.Values["HeatProtect"] is bool h) || h;
+            _loadingHeatUi = true;
+            try { HeatProtectToggle.IsOn = _heatProtectOn; } finally { _loadingHeatUi = false; }
+        }
+
+        /// <summary>Off asks first: without heat protection a hot phone keeps full video and the screen, and on a weak charger the battery drains.</summary>
+        private async void HeatProtectToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (_loadingHeatUi || !_uiReady) return;
+            if (!HeatProtectToggle.IsOn)
+            {
+                var dlg = new ContentDialog
+                {
+                    Title = "Turn heat protection off?",
+                    Content = "When the phone gets hot, nothing will be done about it: full video, the screen as set, the flashlight free. "
+                        + "On a charger that can't keep up (a PC USB port, a small adapter) the battery drains until the phone dies.",
+                    PrimaryButtonText = "Turn off",
+                    CloseButtonText = "Keep it on"
+                };
+                if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    _loadingHeatUi = true;
+                    try { HeatProtectToggle.IsOn = true; } finally { _loadingHeatUi = false; }
+                    return;
+                }
+            }
+            SetHeatProtect(HeatProtectToggle.IsOn);
+        }
+
+        /// <summary>From the switch or the web page (heatprotect=on|off). Off while protection runs: it is left as it is until charging resumes.</summary>
+        private void SetHeatProtect(bool on)
+        {
+            _heatProtectOn = on;
+            _settings.Values["HeatProtect"] = on;
+            if (HeatProtectToggle.IsOn != on) { _loadingHeatUi = true; try { HeatProtectToggle.IsOn = on; } finally { _loadingHeatUi = false; } }
+            Log("Heat protection " + (on ? "on" : "OFF (the phone will not slow down when hot; on a weak charger the battery drains)"));
+            if (!on && _pausedSecs >= 20) { _hotUnprotectedShown = false; } // already hot: the HOT warning fires on the next tick
+            UpdateProtectUi();
+        }
+
         private bool _pOis, _pFocus;
         private string _pFormatKey = "", _pBitrateKey = "";
         private DateTime _protectSince = DateTime.MinValue;
@@ -1280,14 +1542,20 @@ namespace W10MDashcam
         private void UpdateProtectUi()
         {
             bool free = !_protect;
-            TorchAlert.Visibility = PowerAlert.Visibility = _protect ? Visibility.Visible : Visibility.Collapsed;
+            TorchAlert.Visibility = _protect ? Visibility.Visible : Visibility.Collapsed;
+            // the Power alert: protection running, or hot with the switch off (nothing is being done)
+            PowerAlert.Text = _protect ? "Heat protection: power saving forced on" : "HOT and heat protection is off: nothing is done about it - the battery drains on a weak charger";
+            PowerAlert.Visibility = _protect || HotUnprotected ? Visibility.Visible : Visibility.Collapsed;
             SaveAllCheck.IsEnabled = free;
             SaveOisCheck.IsEnabled = free && (_tuning.OisSupported || _camera == null);
             SaveFocusCheck.IsEnabled = free;
             ResolutionBox.IsEnabled = BitrateBox.IsEnabled = HighBwToggle.IsEnabled = free;
+            UpdatePickTexts();
             VideoAlert.Visibility = _protect ? Visibility.Visible : Visibility.Collapsed;
-            PowerSaveButton.IsEnabled = free; KeepPreviewToggle.IsEnabled = free;
+            KeepPreviewToggle.IsEnabled = free;
             PowerSaveToggle.IsEnabled = free;
+            ScreensaverButton.IsEnabled = free;
+            UpdatePreviewText();
         }
 
         private static string BatterySaverText()
@@ -1390,6 +1658,17 @@ namespace W10MDashcam
             o["usbPort"] = JsonValue.CreateNumberValue(UsbPort);
             o["streamPath"] = JsonValue.CreateStringValue(StreamPath);
             o["streaming"] = JsonValue.CreateBooleanValue(_camera != null && _camera.IsStreaming);
+            // the rest of the phone's switches and the service rows, so the web page can mirror the phone screen
+            o["autoStart"] = JsonValue.CreateBooleanValue(_svAutoStart);
+            o["udp"] = JsonValue.CreateBooleanValue(_server.AllowUdp);
+            o["snapshot"] = JsonValue.CreateBooleanValue(_snapshotsOn);
+            o["audioOn"] = JsonValue.CreateBooleanValue(_audioOn);
+            o["keyframeSec"] = JsonValue.CreateNumberValue(_svKeyframeSec);
+            o["wifiIp"] = JsonValue.CreateStringValue(_ips.Count > 0 ? _ips[0] : "");
+            o["rtspViewersWifi"] = JsonValue.CreateNumberValue(_server.ViewerCount(false));
+            o["rtspViewersUsb"] = JsonValue.CreateNumberValue(_server.ViewerCount(true));
+            o["usbSeen"] = JsonValue.CreateBooleanValue(_server.ViewerCount(true) > 0 || (DateTime.Now - _api.LastUsbRequest).TotalSeconds < 30);
+            o["usbCable"] = JsonValue.CreateBooleanValue(OnExternalPower(_battery));
             // status block
             var cm = _camera;
             var br = TryBattery();
@@ -1424,13 +1703,15 @@ namespace W10MDashcam
             o["saveFocus"] = JsonValue.CreateBooleanValue(_tuning.SaveFocus);
             o["oisSupported"] = JsonValue.CreateBooleanValue(_tuning.OisSupported);
             o["protect"] = JsonValue.CreateBooleanValue(_protect);
-            o["preview"] = JsonValue.CreateBooleanValue(PreviewToggle.IsOn);
-            o["keepPreview"] = JsonValue.CreateBooleanValue(KeepPreviewToggle.IsOn);
-            o["powerSave"] = JsonValue.CreateBooleanValue(PowerSaveToggle.IsOn);
+            o["heatProtect"] = JsonValue.CreateBooleanValue(_heatProtectOn);
+            o["preview"] = JsonValue.CreateBooleanValue(_svPreview);
+            o["keepPreview"] = JsonValue.CreateBooleanValue(_svKeepPreview);
+            o["powerSave"] = JsonValue.CreateBooleanValue(_svPowerSave);
             o["torchSupported"] = JsonValue.CreateBooleanValue(_tuning.TorchSupported);
             o["torchOn"] = JsonValue.CreateBooleanValue(_torchWanted);
             o["torchLeftSec"] = JsonValue.CreateNumberValue(_torchWanted ? Math.Max(0, Math.Ceiling((_torchOffAt - DateTime.Now).TotalSeconds)) : 0);
             o["focusHeld"] = JsonValue.CreateBooleanValue(_tuning.FocusHeld);
+            o["focusLocked"] = JsonValue.CreateBooleanValue(!_tuning.FocusAuto && _focusLockedByOnce);
             o["wb"] = JsonValue.CreateNumberValue(_tuning.WhiteBalanceKelvin);
             o["wbMin"] = JsonValue.CreateNumberValue(_tuning.WbMin > 0 ? _tuning.WbMin : 2000);
             o["wbMax"] = JsonValue.CreateNumberValue(_tuning.WbMax > _tuning.WbMin ? _tuning.WbMax : 8000);
@@ -1570,7 +1851,7 @@ namespace W10MDashcam
             "snapshot=" + (_snapshotsOn ? "on" : "off") +
             (_camera != null ? (_camera.PhotoWhileRecordingSupported ? "" : " (this camera can't take photos while recording)") : "") + "\n";
 
-        private string ExtraConfigHelp() => ", stream=start|stop|restart, engine=normal, probe=devices|power, powersave=on|off, preview=on|off, keeppreview=on|off, savepower=on|off, saveois|savefocus=on|off, torch=on|off, focus=once, highbw=on|off, camera=auto|manual, focus=auto|manual|0-100, exposure=auto|manual|MS, wb=auto|manual|KELVIN, format=WIDTHxHEIGHT@FPS, bitrate=MBPS|auto, audio=on|off, udp=on|off, snapshot=on|off" + RecordingConfigHelp;
+        private string ExtraConfigHelp() => ", stream=start|stop|restart, engine=normal, probe=devices|power, powersave=on|off, heatprotect=on|off, autostart=on|off, keyframe=0.5|1|2|3|4, preview=on|off, keeppreview=on|off, savepower=on|off, saveois|savefocus=on|off, torch=on|off, focus=once, highbw=on|off, camera=auto|manual, focus=auto|manual|0-100, exposure=auto|manual|MS, wb=auto|manual|KELVIN, format=WIDTHxHEIGHT@FPS, bitrate=MBPS|auto, audio=on|off, udp=on|off, snapshot=on|off" + RecordingConfigHelp;
 
         private static string FormatKey(FormatOption f) => f.Width + "x" + f.Height + "@" + Math.Round(f.Fps);
 
@@ -1797,7 +2078,13 @@ namespace W10MDashcam
             {
                 bool on = IsOn(pv);
                 await RunUiAsync(() => { PreviewToggle.IsOn = on; return Task.CompletedTask; }); // its handler saves and applies
-                done.Add("preview on the phone " + (on ? "on" : "off"));
+                done.Add("preview " + (on ? "on" : "off"));
+            }
+            if (form.TryGetValue("heatprotect", out var hp))
+            {
+                bool on = IsOn(hp);
+                await RunUiAsync(() => { SetHeatProtect(on); return Task.CompletedTask; });
+                done.Add("heat protection " + (on ? "on" : "off"));
             }
             if (form.TryGetValue("keeppreview", out var kpv))
             {
@@ -1814,7 +2101,7 @@ namespace W10MDashcam
             // Each of these takes "auto" or a value; a value makes just that setting manual.
             if (form.TryGetValue("focus", out var fo))
             {
-                if (fo.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase)) { _tuning.FocusAuto = true; tuningChanged = true; }
+                if (fo.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase)) { _tuning.FocusAuto = true; _tuning.ReleaseFocusHold(); _focusLockedByOnce = false; tuningChanged = true; }
                 else if (fo.Trim().Equals("manual", StringComparison.OrdinalIgnoreCase))
                 { if (_tuning.FocusAuto) _tuning.SeedFromCamera(_camera?.Capture, true, false, false); _tuning.FocusAuto = false; tuningChanged = true; }
                 else if (double.TryParse(fo, System.Globalization.NumberStyles.Float, inv, out var fv))
@@ -1912,6 +2199,21 @@ namespace W10MDashcam
                     else if (a == "restart") { if (on) await ToggleStreamingAsync(); await ToggleStreamingAsync(); }
                 });
                 done.Add("stream " + a);
+            }
+            if (form.TryGetValue("autostart", out var ast))
+            {
+                bool on = IsOn(ast);
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => AutoStartToggle.IsOn = on); // its handler saves
+                done.Add("start streaming when the app opens " + (on ? "on" : "off"));
+            }
+            if (form.TryGetValue("keyframe", out var kfs) && double.TryParse(kfs, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var kfSec))
+            {
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    for (int i = 0; i < KeyframeBox.Items.Count; i++)
+                        if (KeyframeBox.Items[i] is KeyframeOption ko && Math.Abs(ko.Seconds - kfSec) < 0.01) { KeyframeBox.SelectedIndex = i; break; }
+                });
+                done.Add("keyframe every " + kfSec + " s (applies at the next stream start)");
             }
             if (form.TryGetValue("udp", out var udp))
             {
@@ -2076,5 +2378,19 @@ namespace W10MDashcam
             }
             LogText.Text = text;
         }
+    }
+}
+
+namespace W10MDashcam
+{
+    /// <summary>One row of a picker list (Resolution, Bitrate, Keyframe): the item, its text and the row colours.</summary>
+    [Windows.UI.Xaml.Data.Bindable]
+    public sealed class PickRowItem
+    {
+        public object Value { get; set; }
+        public string Text { get; set; }
+        public Windows.UI.Xaml.Media.Brush Light { get; set; }
+        public Windows.UI.Xaml.Media.Brush Fore { get; set; }
+        public Windows.UI.Xaml.Media.Brush Back { get; set; }
     }
 }

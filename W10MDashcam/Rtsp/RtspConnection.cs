@@ -109,6 +109,7 @@ namespace W10MDashcam.Rtsp
         }
 
         public bool IsPlaying => _playing && !_closed;
+        public bool FromUsb => _ip == "127.0.0.1";
 
         private void Log(string m) => _server.Log("RTSP " + _who + ": " + m);
 

@@ -81,6 +81,8 @@ namespace W10MDashcam.Rtsp
 
         /// <summary>Number of viewers currently receiving video.</summary>
         public int ClientCount { get { lock (_lock) return _connections.Count(c => c.IsPlaying); } }
+        /// <summary>Viewers over the USB cable (127.0.0.1) or over Wi-Fi, for the service rows.</summary>
+        public int ViewerCount(bool fromUsb) { lock (_lock) return _connections.Count(c => c.IsPlaying && c.FromUsb == fromUsb); }
 
         public async Task StartAsync()
         {

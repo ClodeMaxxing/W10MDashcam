@@ -11,10 +11,10 @@ namespace W10MDashcam
     /// tools\Sync-Core.ps1). Three switches and one rule set:
     ///  - Preview on the phone (Camera, off by default): the picture while stopped, and while streaming unless the
     ///    screen is blacked out.
-    ///  - Black screen while streaming (Power, on by default): black overlay, brightness 0, and the preview stopped.
+    ///  - Screensaver (under the status, on by default): black overlay, brightness 0, and the preview stopped.
     ///  - Keep the preview running behind the black screen (Power, off by default): the preview stays alive under the
     ///    overlay, so a tap shows the picture at once; costs CPU and heat, and heat protection forces it off.
-    ///  - Adjusting (Automatic unticked, a slider, Focus once, Show camera picture, a tap on the preview area): the
+    ///  - Adjusting (Automatic unticked, a slider, Focus once, Preview (60 s), a tap on the preview area): the
     ///    black screen lifts and the picture shows until 60 s after the last touch.
     /// The preview can only start or stop while no recording runs (changing it mid-stream stalls the 4K pipeline), so
     /// while streaming a preview change costs one stream restart; automatic ones at most once a minute, button presses
@@ -44,7 +44,7 @@ namespace W10MDashcam
         private bool PreviewWanted =>
             _phoneAdjusting
             || (PreviewToggle.IsOn && !(StreamingNow && PowerSaveToggle.IsOn))
-            || (StreamingNow && PowerSaveToggle.IsOn && KeepPreviewToggle.IsOn && !_protect);
+            || (KeepPreviewToggle.IsOn && !_protect); // on: the preview runs, behind the screensaver or not, so a tap shows it at once
 
         /// <summary>From the settings load, before the camera starts (the switches' handlers must not act meanwhile).</summary>
         private void LoadDisplaySettings()
@@ -72,6 +72,7 @@ namespace W10MDashcam
         /// </summary>
         private async Task ApplyDisplayAsync(bool byHand = false)
         {
+            SnapshotDisplaySwitches();
             try
             {
                 bool overlay = OverlayWanted;
@@ -107,8 +108,23 @@ namespace W10MDashcam
         }
 
         /// <summary>Once a second (the stats tick): a preview that disagrees with what is wanted is fixed with one restart.</summary>
+        /// <summary>
+        /// The three switches as plain fields, for the web thread (/camera/state): a ToggleSwitch can only be read on the
+        /// UI thread. Refreshed from the settings load, every display change and once a second.
+        /// </summary>
+        private volatile bool _svPreview, _svKeepPreview, _svPowerSave = true, _svAutoStart = true;
+        private double _svKeyframeSec = 2;
+        private void SnapshotDisplaySwitches()
+        {
+            if (PreviewToggle == null || KeepPreviewToggle == null || PowerSaveToggle == null) return; // the XAML still loads (the screensaver handler fires early)
+            _svPreview = PreviewToggle.IsOn; _svKeepPreview = KeepPreviewToggle.IsOn; _svPowerSave = PowerSaveToggle.IsOn;
+            if (AutoStartToggle != null) _svAutoStart = AutoStartToggle.IsOn;
+            if (KeyframeBox != null && KeyframeBox.SelectedItem is KeyframeOption kfo) _svKeyframeSec = kfo.Seconds;
+        }
+
         private void DisplayTick()
         {
+            SnapshotDisplaySwitches();
             if (_camera == null || !StreamingNow || _busy || _protectBusy) { if (!_blackedOut) UpdatePreviewText(); return; }
             if (_camera.Previewing != PreviewWanted) { var _ = RestartForPreviewAsync(PreviewWanted ? "to show the camera picture" : "to stop the preview", _previewFixPending); }
             else if (!_blackedOut) UpdatePreviewText();
@@ -131,6 +147,7 @@ namespace W10MDashcam
         {
             bool previewing = _camera != null && _camera.Previewing;
             PreviewOffText.Visibility = previewing ? Visibility.Collapsed : Visibility.Visible;
+            UpdateDisplayButtons(previewing);
             if (previewing) return;
             PreviewOffText.Text = _camera == null ? "Camera starting..."
                 : StreamingNow && _phoneAdjusting ? "Starting the camera picture (the stream restarts for a moment)..."
@@ -138,25 +155,48 @@ namespace W10MDashcam
                 : "Preview off\nTap to show the picture for " + AdjustSeconds + " s";
         }
 
-        // ---- adjusting: the picture until 60 s after the last touch
+        /// <summary>
+        /// The two light-bar buttons under the status. Preview lights while a picture shows or is on its way, whatever
+        /// started it (a tap, a slider, the switch); the state text adds the seconds left of a 60 s picture. Screensaver
+        /// lights while the switch is on, and says so when heat protection holds it.
+        /// </summary>
+        private void UpdateDisplayButtons(bool previewing)
+        {
+            if (PreviewBar == null || ScreensaverBar == null || KeepPreviewToggle == null) return; // the XAML still loads
+            var lit = Brush(0x39, 0xFF, 0x14); var dark = Brush(0x16, 0x30, 0x1E);
+            var litText = Brush(0x39, 0xFF, 0x14); var dimText = Brush(0x7F, 0xAE, 0x86);
+            bool on = previewing || _phoneAdjusting || PreviewToggle.IsOn || (KeepPreviewToggle.IsOn && !_protect);
+            PreviewBar.Background = on ? lit : dark;
+            PreviewStateText.Foreground = on ? litText : dimText;
+            int left = _phoneAdjusting ? Math.Max(0, (int)Math.Ceiling((_adjustEnds - DateTime.Now).TotalSeconds)) : 0;
+            PreviewStateText.Text = !on ? "OFF" : _phoneAdjusting && left > 0 ? "ON · " + left + " s" : previewing ? "ON" : "STARTING";
+            bool ss = PowerSaveToggle.IsOn;
+            ScreensaverBar.Background = ss ? lit : dark;
+            ScreensaverStateText.Foreground = ss ? litText : dimText;
+            ScreensaverStateText.Text = !ss ? "OFF" : _protect ? "ON · HEAT PROTECTION" : StreamingNow ? "ON" : "ON · WHILE STREAMING";
+        }
 
-        /// <summary>A camera control was touched on the phone (or Show camera picture / the preview area was tapped).</summary>
+        // ---- adjusting: the picture until 60 s after the last touch
+        private DateTime _adjustEnds = DateTime.MinValue; // for the seconds left on the Preview button
+
+        /// <summary>A camera control was touched on the phone (or Preview (60 s) / the preview area was tapped).</summary>
         private void TouchPhoneAdjust() { var _ = TouchPhoneAdjustAsync(false); }
 
         private async Task TouchPhoneAdjustAsync(bool byHand)
         {
             if (_adjustTimer == null) LoadDisplaySettings();
             _adjustTimer.Stop(); _adjustTimer.Start();
+            _adjustEnds = DateTime.Now.AddSeconds(AdjustSeconds);
             if (_protect) return; // heat protection keeps the screen black
             bool was = _phoneAdjusting;
             _phoneAdjusting = true;
             _wakeShowing = false; _wakeTimer.Stop();
-            if (!was) Log(byHand ? "Show camera picture: the picture stays until " + AdjustSeconds + " s after the last touch" : "Camera controls touched on the phone: showing the picture until " + AdjustSeconds + " s after the last touch");
+            if (!was) Log(byHand ? "Preview (60 s): the picture stays until " + AdjustSeconds + " s after the last touch" : "Camera controls touched on the phone: showing the picture until " + AdjustSeconds + " s after the last touch");
             if (!was || byHand) await ApplyDisplayAsync(byHand);
         }
 
         /// <summary>Keeps the timer going while the person is still adjusting (does not start adjusting by itself).</summary>
-        private void KeepAdjusting() { if (_phoneAdjusting) { _adjustTimer.Stop(); _adjustTimer.Start(); } }
+        private void KeepAdjusting() { if (_phoneAdjusting) { _adjustTimer.Stop(); _adjustTimer.Start(); _adjustEnds = DateTime.Now.AddSeconds(AdjustSeconds); } }
 
         private void EndPhoneAdjust() { _phoneAdjusting = false; _adjustTimer?.Stop(); }
 
@@ -170,9 +210,42 @@ namespace W10MDashcam
             await ApplyDisplayAsync();
         }
 
-        private async void ShowPictureButton_Click(object sender, RoutedEventArgs e) => await TouchPhoneAdjustAsync(true);
+        /// <summary>
+        /// The Preview button. Lit (a picture shows for any reason): ends it - the 60 s, the switch and Keep the preview.
+        /// Dark: while streaming behind the screensaver, the picture for 60 s (the screensaver stays on and comes back);
+        /// otherwise the switch goes on and the picture stays until the button is pressed again.
+        /// </summary>
+        private async void PreviewButton_Click(object sender, RoutedEventArgs e)
+        {
+            bool showing = (_camera != null && _camera.Previewing) || _phoneAdjusting || PreviewToggle.IsOn || KeepPreviewToggle.IsOn;
+            if (showing) { await TurnPreviewOffAsync(); return; }
+            if (StreamingNow && PowerSaveToggle.IsOn) { await TouchPhoneAdjustAsync(true); return; }
+            PreviewToggle.IsOn = true; // its handler saves, switches the screensaver off and applies
+        }
 
-        /// <summary>A tap on the dark preview area ("Preview off"): the same as Show camera picture.</summary>
+        /// <summary>The Screensaver button: flips the switch (its handler does the rest). Locked while heat protection holds it.</summary>
+        private void ScreensaverButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_protect) { Log("Screensaver: held on by heat protection"); return; }
+            PowerSaveToggle.IsOn = !PowerSaveToggle.IsOn;
+        }
+
+        /// <summary>No picture at all: the 60 s ends and Preview on the phone and Keep the preview running go off (one restart while streaming).</summary>
+        private async Task TurnPreviewOffAsync()
+        {
+            EndPhoneAdjust();
+            _loadingDisplayUi = true;
+            try
+            {
+                if (PreviewToggle.IsOn) { PreviewToggle.IsOn = false; _settings.Values["Preview"] = false; }
+                if (KeepPreviewToggle.IsOn) { KeepPreviewToggle.IsOn = false; if (!_protect) _settings.Values["KeepPreview"] = false; }
+            }
+            finally { _loadingDisplayUi = false; }
+            Log("Preview off");
+            await ApplyDisplayAsync(byHand: true);
+        }
+
+        /// <summary>A tap on the dark preview area ("Preview off"): the same as Preview (60 s).</summary>
         private async void PreviewArea_Tapped(object sender, TappedRoutedEventArgs e) => await TouchPhoneAdjustAsync(true);
 
         // ---- the black screen: a tap shows the status for 15 s; Black out the screen now ends a picture at once
@@ -199,15 +272,6 @@ namespace W10MDashcam
             await ApplyDisplayAsync();
         }
 
-        private async void PowerSaveButton_Click(object sender, RoutedEventArgs e)
-        {
-            EndPhoneAdjust();
-            _wakeShowing = false; _wakeTimer?.Stop();
-            if (!PowerSaveToggle.IsOn) PowerSaveToggle.IsOn = true; // its handler saves and applies
-            else await ApplyDisplayAsync(byHand: true);
-            if (!StreamingNow) Log("Black screen is on; the screen goes black when streaming starts");
-        }
-
         /// <summary>The black-screen switch from the web page or USB config (powersave=on|off).</summary>
         private async Task SetBlackScreenAsync(bool on)
         {
@@ -218,22 +282,33 @@ namespace W10MDashcam
 
         private async void PowerSaveToggle_Toggled(object sender, RoutedEventArgs e)
         {
-            if (_loadingDisplayUi) return;
+            if (_loadingDisplayUi || !_uiReady) return; // switches with IsOn="True" fire during XAML load, before later controls exist
             if (!_protect) _settings.Values["PowerSave"] = PowerSaveToggle.IsOn; // forced by heat protection: not saved
+            if (PowerSaveToggle.IsOn)
+            {
+                // the screensaver ends a picture at once, and the two switches are exclusive: screensaver on = preview off
+                EndPhoneAdjust(); _wakeShowing = false; _wakeTimer?.Stop();
+                // (PreviewToggle is null while the XAML still loads: IsOn="True" fires this handler before the Camera section exists)
+                if (PreviewToggle != null && PreviewToggle.IsOn) { _loadingDisplayUi = true; try { PreviewToggle.IsOn = false; } finally { _loadingDisplayUi = false; } _settings.Values["Preview"] = false; }
+            }
+            Log("Screensaver " + (PowerSaveToggle.IsOn ? "on" : "off"));
             await ApplyDisplayAsync(byHand: true);
         }
 
         private async void PreviewToggle_Toggled(object sender, RoutedEventArgs e)
         {
-            if (_loadingDisplayUi) return;
+            if (_loadingDisplayUi || !_uiReady) return; // switches with IsOn="True" fire during XAML load, before later controls exist
             _settings.Values["Preview"] = PreviewToggle.IsOn;
-            Log("Preview on the phone " + (PreviewToggle.IsOn ? "on" : "off"));
+            Log("Preview " + (PreviewToggle.IsOn ? "on" : "off"));
+            if (!PreviewToggle.IsOn) { await TurnPreviewOffAsync(); return; } // off means no picture at all, now
+            // on: the picture must show, so the screensaver goes off (the two switches are exclusive; the person's choice is saved)
+            if (PowerSaveToggle != null && PowerSaveToggle.IsOn && !_protect) { _loadingDisplayUi = true; try { PowerSaveToggle.IsOn = false; } finally { _loadingDisplayUi = false; } _settings.Values["PowerSave"] = false; }
             await ApplyDisplayAsync(byHand: true);
         }
 
         private async void KeepPreviewToggle_Toggled(object sender, RoutedEventArgs e)
         {
-            if (_loadingDisplayUi) return;
+            if (_loadingDisplayUi || !_uiReady) return; // switches with IsOn="True" fire during XAML load, before later controls exist
             if (!_protect) _settings.Values["KeepPreview"] = KeepPreviewToggle.IsOn;
             Log("Preview behind the black screen " + (KeepPreviewToggle.IsOn ? "on (costs CPU and heat; a tap on the black screen shows the picture at once)" : "off"));
             await ApplyDisplayAsync(byHand: true);

@@ -155,10 +155,13 @@ namespace W10MDashcam
             await MatchCameraAsync();
         }
 
+        /// <summary>The recording row (the status card's header) and the Live view bar: edge lights and state texts.</summary>
         private void UpdateRunButtons()
         {
-            RecordButton.Content = _recorder.Enabled ? "Stop recording" : "Start recording";
-            StartButton.Content = _wantLive ? "Stop streaming" : "Start streaming";
+            if (StreamBar == null) return;
+            bool rec = _recorder.State == "recording";
+            StreamBar.Background = rec ? GreenFill : Brush(0x16, 0x30, 0x1E);
+            UpdateStreamButton(_wantLive);
         }
 
         // ---------------------------------------------------------------- camera button
