@@ -246,7 +246,7 @@ namespace W10MDashcam.Recording
                 }
                 Wake();
             }
-            catch { }
+            catch (Exception ex) { EntryError("video frame", ex); }
         }
 
         public void OnAudio(byte[] data, long time)
@@ -261,6 +261,23 @@ namespace W10MDashcam.Recording
                     _queuedBytes += data.Length;
                 }
                 Wake();
+            }
+            catch (Exception ex) { EntryError("audio frame", ex); }
+        }
+
+        private int _entryErrors;
+
+        /// <summary>
+        /// A camera-thread entry point failed (it must never throw): the first 5 are logged, then one line per 1000,
+        /// so a failure that repeats on every frame shows in the log without flooding it.
+        /// </summary>
+        private void EntryError(string what, Exception ex)
+        {
+            try
+            {
+                int n = System.Threading.Interlocked.Increment(ref _entryErrors);
+                if (n <= 5) Log("Recorder: " + what + " not queued: " + ex.GetType().Name + ": " + ex.Message + (n == 5 ? " (from now on counted, one line per 1000)" : ""));
+                else if (n % 1000 == 0) Log("Recorder: " + n + " frames or commands could not be queued so far");
             }
             catch { }
         }
@@ -340,7 +357,7 @@ namespace W10MDashcam.Recording
                 lock (_lock) { _queue.Enqueue(item); _queuedBytes += bytes; }
                 Wake();
             }
-            catch { }
+            catch (Exception ex) { EntryError(item?.GetType().Name ?? "command", ex); }
         }
 
         private void Wake()
