@@ -512,7 +512,6 @@ namespace W10MDashcam.Streaming
             }
 
             _frameStep = 3;
-            LastSampleTime = sampleTime;
             // One sample from the encoder = one frame. Pass it on whole, with the encoder's own timestamp.
             var au = new List<byte[]>(4);
             bool key = false;
@@ -580,9 +579,6 @@ namespace W10MDashcam.Streaming
 
         /// <summary>Average capture-to-encoded latency over the last 5 s window (ms), or -1.</summary>
         public long LastLatencyMs { get; private set; } = -1;
-
-        /// <summary>Encoder timestamp of the latest sample (100 ns units); used later for RTSP.</summary>
-        public long LastSampleTime { get; private set; }
 
         public async Task StopStreamingAsync()
         {
