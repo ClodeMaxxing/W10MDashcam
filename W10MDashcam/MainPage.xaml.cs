@@ -1470,8 +1470,13 @@ namespace W10MDashcam
             try { return Windows.System.Power.PowerManager.EnergySaverStatus.ToString(); } catch { return "unknown"; }
         }
 
-        private bool IsCharging(Windows.Devices.Power.BatteryReport r) =>
-            r != null && (r.Status == Windows.System.Power.BatteryStatus.Charging || r.Status == Windows.System.Power.BatteryStatus.Idle);
+        /// <summary>Current is flowing into the battery. "Idle" (plugged in, full or paused because hot) is not charging.</summary>
+        private static bool IsCharging(Windows.Devices.Power.BatteryReport r) =>
+            r != null && r.Status == Windows.System.Power.BatteryStatus.Charging;
+
+        /// <summary>A charger is connected (Charging or Idle); only "Discharging" means the phone runs on its battery.</summary>
+        private static bool OnExternalPower(Windows.Devices.Power.BatteryReport r) =>
+            r != null && r.Status != Windows.System.Power.BatteryStatus.Discharging;
 
         private void UpdateStatusText()
         {
@@ -1482,7 +1487,7 @@ namespace W10MDashcam
                 string bat = pct.HasValue ? pct + "% " : "";
                 bat += r == null ? "unknown" : r.Status.ToString().ToLowerInvariant();
                 int bars = WifiBars();
-                bool low = pct.HasValue && pct.Value < 20 && !IsCharging(r);
+                bool low = pct.HasValue && pct.Value < 20 && !OnExternalPower(r);
                 var sb = new System.Text.StringBuilder();
                 sb.Append("Battery: ").Append(bat);
                 if (low) sb.Append("  LOW - use a wall charger");
@@ -1568,6 +1573,7 @@ namespace W10MDashcam
             o["battery"] = bp.HasValue ? JsonValue.CreateNumberValue(bp.Value) : JsonValue.CreateNullValue();
             o["batteryStatus"] = JsonValue.CreateStringValue(br != null ? br.Status.ToString() : "unknown");
             o["charging"] = JsonValue.CreateBooleanValue(IsCharging(br));
+            o["onExternalPower"] = JsonValue.CreateBooleanValue(OnExternalPower(br));
             o["batteryFalling"] = JsonValue.CreateBooleanValue(BatteryFalling);
             o["batterySaver"] = JsonValue.CreateStringValue(BatterySaverText());
             int wb2 = WifiBars();
