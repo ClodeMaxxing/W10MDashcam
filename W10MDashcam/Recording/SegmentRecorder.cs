@@ -66,7 +66,7 @@ namespace W10MDashcam.Recording
         private const long MaxFragment = 2 * Second;      // a fragment is written at least this often
         private static readonly Regex SafeName = new Regex(@"^[0-9A-Za-z_\-\. ()]{1,80}\.mp4\z"); // \z: '$' would also allow a trailing newline
         /// <summary>The app's own loop files: 2026-10-30_13-40-05.mp4 (or "... (2).mp4"). Nothing else is ever deleted.</summary>
-        private static readonly Regex OwnName = new Regex(@"^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d( \(\d+\))?\.mp4$");
+        private static readonly Regex OwnName = new Regex(@"^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d( \(\d+\))?\.mp4\z"); // the app's own recordings (saved clips keep these names)
 
         // ---- queue (camera thread -> worker)
         private readonly object _lock = new object();
@@ -1339,7 +1339,7 @@ namespace W10MDashcam.Recording
         public async Task<string> DeleteAsync(string name, bool saved)
         {
             if (!SafeName.IsMatch(name ?? "")) return "bad name";
-            if (!saved && !OwnName.IsMatch(name)) return "not a recording";
+            if (!OwnName.IsMatch(name)) return "not a recording"; // saved clips too: never a file someone put there by hand
             var c = new Command { What = Cmd.Delete, Name = name, All = saved, Done = new TaskCompletionSource<bool>() };
             Enqueue(c, 0); // on the worker: its lists stay right without re-reading the folder
             await Task.WhenAny(c.Done.Task, Task.Delay(15000));
@@ -1396,7 +1396,7 @@ namespace W10MDashcam.Recording
             {
                 foreach (var f in await ListMp4Async(folder))
                 {
-                    if (!savedFolder && !OwnName.IsMatch(f.Name)) continue;            // never other people's files
+                    if (!OwnName.IsMatch(f.Name)) continue;                            // never other people's files (saved folder too)
                     if (!savedFolder && !includeSaved && IsPending(f.Name)) continue; // a saved clip waiting to move
                     try
                     {
