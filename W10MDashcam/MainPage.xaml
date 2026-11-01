@@ -97,6 +97,9 @@
                             Click="LiveButton_Click" IsEnabled="False" />
                 </Grid>
                 <!-- Aiming the camera: the picture for 60 s after the last touch, then the black screen again (MainPage.xaml.cs). -->
+                <!-- Safe mode (the MP4 engine after a crash or two stalls): the way back, as on the web page. -->
+                <Button x:Name="NormalModeButton" Content="Return to normal mode (low-latency engine)" HorizontalAlignment="Stretch" Visibility="Collapsed"
+                        Margin="0,2,0,4" Click="NormalModeButton_Click" Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
                 <Button x:Name="ShowPictureButton" Content="Show camera picture (60 s)" HorizontalAlignment="Stretch"
                         Margin="0,-2,0,6" Click="ShowPictureButton_Click" />
                 <!-- Dashcam recording card: REC state, the Save clip button, storage summary. -->
