@@ -370,12 +370,7 @@ namespace W10MDashcam
             if (halted)
             {
                 IncidentText.Text = "RECORDING IS NOT WORKING\n" + _recorder.Incident;
-                if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible)
-                {
-                    _wakeTimer.Stop();
-                    BlackoutOverlay.Visibility = Visibility.Collapsed;
-                    if (_brightness != null && _brightness.IsSupported) _brightness.StopOverride();
-                }
+                if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible) { var lift = ApplyDisplayAsync(); } // the warning must be seen (PanelOnScreen)
                 if (!_incidentShown)
                 {
                     _incidentShown = true;
@@ -387,7 +382,7 @@ namespace W10MDashcam
             else if (_incidentShown)
             {
                 _incidentShown = false;
-                if (_blackedOut) { _wakeTimer.Stop(); _wakeTimer.Start(); } // black out again after the usual delay
+                var back = ApplyDisplayAsync(); // black out again (MainPage.Display.cs)
             }
         }
 

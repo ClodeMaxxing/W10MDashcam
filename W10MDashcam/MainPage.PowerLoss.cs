@@ -124,12 +124,7 @@ namespace W10MDashcam
                 PowerLossMessage.Text = "STOPPED - NO POWER\nRecording and live view stopped to save the battery. They start again when the power returns.";
                 PowerLossButton.Content = "START AGAIN NOW";
             }
-            if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible) // the countdown must be seen
-            {
-                _wakeTimer.Stop();
-                BlackoutOverlay.Visibility = Visibility.Collapsed;
-                if (_brightness != null && _brightness.IsSupported) _brightness.StopOverride();
-            }
+            if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible) { var _ = ApplyDisplayAsync(); } // the countdown must be seen (PanelOnScreen)
         }
 
         private void PowerLossButton_Click(object sender, RoutedEventArgs e)
@@ -139,7 +134,7 @@ namespace W10MDashcam
                 _powerLostAt = DateTime.MinValue;
                 _powerLossKept = true;
                 Log("Power: keep recording on battery (chosen on the phone)");
-                if (_blackedOut) { _wakeTimer.Stop(); _wakeTimer.Start(); } // black out again after the usual delay
+                var _ = ApplyDisplayAsync(); // black out again (MainPage.Display.cs)
             }
             else if (_powerStopped) RestartAfterPowerLoss("Power: started again by hand (on battery)");
             UpdatePowerLossUi();
