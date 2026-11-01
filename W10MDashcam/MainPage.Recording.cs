@@ -485,9 +485,8 @@ namespace W10MDashcam
             string note = InternalStorageNotice();
             StorageNotice.Visibility = note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             if (note.Length > 0) StorageNoticeText.Text = note;
-            string charger = ChargerNotice();
-            ChargerNoticeBorder.Visibility = charger.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (charger.Length > 0) ChargerNoticeText.Text = charger;
+            ChargerNoticeBorder.Visibility = _chargerNotice.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (_chargerNotice.Length > 0) ChargerNoticeText.Text = _chargerNotice;
         }
 
         /// <summary>Text of the "recording to internal storage" notice (empty when recording elsewhere).</summary>

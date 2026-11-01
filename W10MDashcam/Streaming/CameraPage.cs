@@ -219,7 +219,7 @@ function render(){
  if(st.defaultLogin)nh+=""<div class='notice'><span class='ni'>!</span><span>Default login <code>admin / admin</code> in use. Change it under Network and login.</span></div>"";
  if(rc.powerLossLeft!=null)nh+=""<div class='notice bad'><span class='ni'>!</span><span>Power lost: recording stops in ""+rc.powerLossLeft+' s unless the power comes back (Keep recording on the phone skips it).</span></div>';
  if(rc.powerStopped)nh+=""<div class='notice bad'><span class='ni'>!</span><span>Stopped: no power. Recording and live view start again when the power returns.</span></div>"";
- if(st.charging&&st.batteryStatus=='Charging'&&st.netWatts!=null&&st.netWatts<-0.3)nh+=""<div class='notice'><span class='ni'>!</span><span>Charger insufficient: the battery is draining while charging (""+st.netWatts.toFixed(1)+' W). Use a 2 A or better charger.</span></div>';
+ if(st.chargerNotice)nh+=""<div class='notice'><span class='ni'>!</span><span>""+esc(st.chargerNotice)+'</span></div>';
  if(rc.place=='Phone storage')nh+=""<div class='notice'><span class='ni'>!</span><span>Recording to the phone's internal storage""
   +(rc.freeMB!=null?' ('+mb(rc.freeMB*1048576)+' free'+(rc.footageMin!=null?', keeps ~'+fmin(rc.footageMin):'')+')':'')+'. An SD card is highly recommended: constant recording wears out the internal storage.</span></div>';
  $('warn').innerHTML=nh;

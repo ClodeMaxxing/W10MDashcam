@@ -1578,6 +1578,7 @@ namespace W10MDashcam
             o["charging"] = JsonValue.CreateBooleanValue(IsCharging(br));
             o["onExternalPower"] = JsonValue.CreateBooleanValue(OnExternalPower(br));
             o["batteryFalling"] = JsonValue.CreateBooleanValue(BatteryFalling);
+            o["chargerNotice"] = JsonValue.CreateStringValue(_chargerNotice);
             o["batterySaver"] = JsonValue.CreateStringValue(BatterySaverText());
             int wb2 = WifiBars();
             o["wifiBars"] = wb2 >= 0 ? JsonValue.CreateNumberValue(wb2) : JsonValue.CreateNullValue();
@@ -1632,6 +1633,7 @@ namespace W10MDashcam
             o["batteryPercent"] = pct.HasValue ? JsonValue.CreateNumberValue(pct.Value) : JsonValue.CreateNullValue();
             o["batteryStatus"] = JsonValue.CreateStringValue(r != null ? r.Status.ToString() : "unknown");
             o["batteryFalling"] = JsonValue.CreateBooleanValue(BatteryFalling);
+            o["chargerNotice"] = JsonValue.CreateStringValue(_chargerNotice);
             o["netWatts"] = _power.NetWatts.HasValue ? JsonValue.CreateNumberValue(Math.Round(_power.NetWatts.Value, 2)) : JsonValue.CreateNullValue();
             o["drawWatts"] = _power.DrawWatts.HasValue ? JsonValue.CreateNumberValue(Math.Round(_power.DrawWatts.Value, 2)) : JsonValue.CreateNullValue();
             o["cpuAppPct"] = _power.ProcCpuPct.HasValue ? JsonValue.CreateNumberValue(Math.Round(_power.ProcCpuPct.Value)) : JsonValue.CreateNullValue();
