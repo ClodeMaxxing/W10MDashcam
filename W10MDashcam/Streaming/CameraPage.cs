@@ -18,10 +18,10 @@ a{color:#9cf0b0}
 .card{background:#071109;border:1px solid #1f3a26;border-radius:8px;margin:0 0 6px;overflow:hidden}
 .ttl{display:flex;justify-content:space-between;align-items:baseline;padding:8px 10px 6px;background:#050a06;border-bottom:1px solid #1f3a26}
 .ttl b{font-size:20px;font-weight:600;color:#e4f5e7}.ttl i{font-style:normal;color:#39ff14;font-size:11px;font-weight:bold}
-.srow{position:relative;display:flex;gap:9px;align-items:center;height:46px;padding:0 10px 0 16px;background:#0a160d;border-bottom:1px solid #1f3a26;cursor:pointer;user-select:none}
+.srow{position:relative;display:flex;gap:9px;align-items:center;height:46px;padding:0 10px 0 16px;margin:8px;background:#0f2416;border:1px solid #1f4a2a;border-radius:8px;overflow:hidden;cursor:pointer;user-select:none}
 .srow:before{content:'';position:absolute;left:0;top:9px;bottom:9px;width:4px;border-radius:0 2px 2px 0;background:#16301e}
 .srow.on:before{background:#39ff14}
-.srow b{font-weight:600;letter-spacing:1px;font-size:14px;color:#f0b0b0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.srow.hot b{color:#ff6b6b}
+.srow b{font-weight:600;letter-spacing:1px;font-size:15px;color:#cfe8d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.srow.on b{color:#fff}.srow .rt{font-style:normal;font-size:11px;color:#7fae86;white-space:nowrap}.srow.hot b{color:#ff6b6b}
 .srow .fmt{margin-left:auto;border:1px solid #2a4a32;border-radius:9px;padding:1px 7px;font-size:11px;color:#8fb596;font-family:Consolas,'Cascadia Mono',monospace;background:#0b1a10;flex:none}
 .srow.cam .fmt{border-color:#39ff14;color:#cfffd2}
 .srow.busy{opacity:.5;pointer-events:none}
@@ -114,9 +114,8 @@ table.files td.s{text-align:right;color:#7fae86;white-space:nowrap}table.files t
 
 <div class='card'>
  <div class='ttl'><b>W10MDashcam</b><i id='ver'></i></div>
- <div class='srow' id='srow'><span class='rl'></span><b id='rstate'>NOT RECORDING</b><span class='fmt' id='fmt'>-</span></div>
+ <div class='srow' id='srow'><span class='rl'></span><b id='rstate'>START RECORDING</b><i class='rt' id='rtime'></i><span class='fmt' id='fmt'>-</span></div>
  <div class='body'>
-  <div class='g3'><div class='tile k dim'><b>FPS</b><span id='tfps'>-</span></div><div class='tile k dim'><b>MBPS</b><span id='tmbps'>-</span></div><div class='tile k dim'><b>VIEWERS</b><span id='tview'>-</span></div></div>
   <div class='g3' id='tiles'></div>
   <div id='warn'></div>
  </div>
@@ -129,17 +128,6 @@ table.files td.s{text-align:right;color:#7fae86;white-space:nowrap}table.files t
  <div class='pl' id='rpls' style='display:none'><span id='rplt'></span></div>
  <button class='save' id='rsave' data-tip='Keeps the file being recorded, the one before it and (when Save clip also keeps the next file is on) the next one in the Saved folder, where loop recording never deletes them.'>SAVE CLIP</button>
  <div class='info' id='rinfo'></div>
-</div>
-
-<div class='bar' id='blv'><span class='n'>Live view (RTSP)</span><span class='s' id='blvs'>OFF</span></div>
-
-<div class='grp'><h4>RTSP LIVE VIEW</h4>
- <div class='svc' id='rw'><b>Wi-Fi</b><code id='rwa'></code><span id='rwn'></span></div>
- <div class='svc' id='ru'><b>USB</b><code id='rua'></code><span id='run'></span></div>
-</div>
-<div class='grp'><h4>WEB UI</h4>
- <div class='svc' id='ww'><b>Wi-Fi</b><code id='wwa'></code><span id='wwn'></span></div>
- <div class='svc' id='wu'><b>USB</b><code id='wua'></code><span id='wun'></span></div>
 </div>
 
 <div class='bar' id='bpv'><span class='n'>Preview</span><span class='s' id='bpvs'>OFF</span></div>
@@ -188,6 +176,21 @@ table.files td.s{text-align:right;color:#7fae86;white-space:nowrap}table.files t
  <div class='fld sl' id='wsl'><div class='t'><b>White balance</b><span class='seg' id='wseg'><span>Auto</span><span>Manual</span></span></div><div class='val'><em id='wv'>-</em><small id='wn'></small></div><input type='range' id='ws' min='2000' max='8000' step='100'></div>
 </div></div>
 
+<div class='dr'><div class='dh' data-f='streaming'>STREAMING<span id='sths' style='margin-left:auto;margin-right:10px;font-weight:400;color:#7fae86'>OFF</span><i>&#x25B8;</i></div><div class='db' id='streaming'>
+<div class='g3'><div class='tile k dim'><b>FPS</b><span id='tfps'>-</span></div><div class='tile k dim'><b>MBPS</b><span id='tmbps'>-</span></div><div class='tile k dim'><b>VIEWERS</b><span id='tview'>-</span></div></div>
+<div class='bar' id='blv'><span class='n'>Live view (RTSP)</span><span class='s' id='blvs'>OFF</span></div>
+
+<div class='grp'><h4>RTSP LIVE VIEW</h4>
+ <div class='svc' id='rw'><b>Wi-Fi</b><code id='rwa'></code><span id='rwn'></span></div>
+ <div class='svc' id='ru'><b>USB</b><code id='rua'></code><span id='run'></span></div>
+</div>
+<div class='grp'><h4>WEB UI</h4>
+ <div class='svc' id='ww'><b>Wi-Fi</b><code id='wwa'></code><span id='wwn'></span></div>
+ <div class='svc' id='wu'><b>USB</b><code id='wua'></code><span id='wun'></span></div>
+</div>
+<div class='sw' data-k='liveonopen' id='ast'><span class='n'>Live stream when the app opens</span><span class='s'>OFF</span></div>
+</div></div>
+
 <div class='dr'><div class='dh' data-f='power'>POWER<i>&#x25B8;</i></div><div class='db' id='power'>
  <div class='sw' data-k='heatprotect' id='hp'><span class='n'>Heat protection<i class='tip' data-tip='When charging pauses on a good charger the phone is hot: 1080p / 6 Mbps, screensaver on, flashlight locked, until it charges normally again. Off: nothing is changed, and on a weak charger the battery drains and the phone dies.'>i</i></span><span class='s'>ON</span></div>
  <div class='bad' id='ta2' style='display:none'></div>
@@ -199,7 +202,6 @@ table.files td.s{text-align:right;color:#7fae86;white-space:nowrap}table.files t
  <div class='fld'><b>Web page</b><code id='webaddr'></code></div>
  <div class='sw' data-k='log' id='lgo'><span class='n'>Log and stats pages (<a href='/log' target='_blank'>/log</a> &middot; <a href='/stats' target='_blank'>/stats</a>)<i class='tip' data-tip='The app log and graphs of the last 12 hours.'>i</i></span><span class='s'>OFF</span></div>
  <div class='fld'><b>Live view (RTSP, for VLC or an NVR)</b><code id='rtspaddr'></code></div>
- <div class='sw' data-k='liveonopen' id='ast'><span class='n'>Live stream when the app opens</span><span class='s'>OFF</span></div>
  <div class='sw' data-k='udp' id='udp'><span class='n'>Allow RTP over UDP<i class='tip' data-tip='Off: viewers get the stream over TCP, which is more reliable on Wi-Fi.'>i</i></span><span class='s'>OFF</span></div>
  <div class='sw' data-k='snapshot' id='snap'><span class='n'>Snapshots at /snapshot.jpg</span><span class='s'>OFF</span></div>
  <div class='fld'><b>Login (stream and web page)</b><div id='lmsg' style='font-size:12px;margin-top:3px'>One login protects the stream and this page.<i class='tip' data-tip='Use the new login in your NVR / VLC: rtsp://USER:PASSWORD@phone-address:8554/live. The browser asks you to sign in again after a change.'>i</i></div>
@@ -254,7 +256,7 @@ function render(){
  if(st.version)$('ver').textContent='v'+st.version;
  var fm=/^(\d+)x(\d+)@(\d+)/.exec(st.format||''),res=fm?(fm[2]>=2160?'4K':fm[2]+'p')+fm[3]+(st.safeMode?' SAFE':''):'-';
  $('srow').className='srow'+(rec?' on':'')+(s?' cam':'')+(p?' hot':'')+(w?'':' busy');
- $('rstate').textContent=p?'HEAT PROTECTION':rec?'REC '+hms(r.seconds):r.halted?'RECORDING STOPPED':!r.enabled?'START RECORDING':String(r.state||'').toUpperCase();$('fmt').textContent=res;
+ $('rstate').textContent=p?'HEAT PROTECTION':rec?'RECORDING':r.halted?'RECORDING STOPPED':!r.enabled?'START RECORDING':String(r.state||'').toUpperCase();$('rtime').textContent=rec?hms(r.seconds):'';$('fmt').textContent=res;
  $('tfps').textContent=live&&s?Math.round(st.fps):'-';$('tmbps').textContent=live&&s?(+st.mbps).toFixed(1):'-';$('tview').textContent=live&&s?st.viewers:'-';
  var kt=document.querySelectorAll('.tile.k');for(var i=0;i<kt.length;i++)kt[i].className='tile k'+(live&&s?'':' dim');
  var cpu=/phone (\d+) %, app (\d+)/.exec(st.cpuText||''),cpuP=cpu?+cpu[1]:0,cpuA=cpu?+cpu[2]:0,ml=st.memoryLimitMB||1536,mp=100*st.memoryMB/ml;
@@ -305,7 +307,7 @@ function render(){
  $('rtspaddr').textContent=ip?'rtsp://'+(st.loginSet?'USER:PASSWORD@':'')+ip+':'+st.rtspPort+st.streamPath:'(no Wi-Fi)';
  $('webaddr').textContent=(ip?'http://'+ip+':'+location.port+'/camera\n':'')+'http://'+usb+'/camera (USB)';
  // the bars
- bar('blv',live,!w,!live?'OFF':!s?'ON · STARTING':st.viewers>0?'ON · '+vt(st.viewers).toUpperCase():'ON');
+ bar('blv',live,!w,!live?'OFF':!s?'ON · STARTING':st.viewers>0?'ON · '+vt(st.viewers).toUpperCase():'ON');$('sths').textContent=$('blvs').textContent;
  var pvOn=st.previewing||st.preview||st.keepPreview;
  bar('bpv',pvOn,!w,pvOn?'ON':'OFF');
  bar('bss',st.powerSave,!w||p,!st.powerSave?'OFF':p?'ON · HEAT PROTECTION':s?'ON':'ON · WHILE RECORDING');

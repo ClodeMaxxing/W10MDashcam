@@ -651,6 +651,7 @@ namespace W10MDashcam
             LiveStateText.Foreground = live ? GreenFill : Brush(0x7F, 0xAE, 0x86);
             int n = _server.ClientCount;
             LiveStateText.Text = !live ? "OFF" : !running ? "ON · STARTING" : n > 0 ? "ON · " + n + (n == 1 ? " VIEWER" : " VIEWERS") : "ON";
+            if (StreamingStateText != null) StreamingStateText.Text = LiveStateText.Text; // the drawer head shows it while folded
         }
 
 

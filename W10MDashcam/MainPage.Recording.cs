@@ -348,10 +348,12 @@ namespace W10MDashcam
             CheckStorageWarning();
             // Nobody sees the rest under the black overlay: it is filled in again on the first tick after the screen wakes.
             if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible) return;
-            RecDot.Fill = rec || r.Halted ? Brush(0xFF, 0x30, 0x30) : r.State == "error" ? Brush(0xFF, 0xA0, 0x20) : Brush(0x55, 0x55, 0x55);
-            RecStateText.Text = rec ? "REC " + TimeSpan.FromSeconds(Math.Floor(r.CurrentSeconds)).ToString(@"m\:ss")
+            RecDot.Fill = rec || r.Halted ? Brush(0xFF, 0x30, 0x30) : r.State == "error" ? Brush(0xFF, 0xA0, 0x20) : Brush(0x3A, 0x20, 0x20);
+            RecStateText.Text = rec ? "RECORDING"
                 : r.Halted ? "RECORDING STOPPED"
-                : !r.Enabled ? "NOT RECORDING" : r.State.ToUpperInvariant();
+                : !r.Enabled ? "START RECORDING" : r.State.ToUpperInvariant();
+            RecTimeText.Text = rec ? ((int)r.CurrentSeconds / 60) + ":" + ((int)r.CurrentSeconds % 60).ToString("00") : "";
+            RecStateText.Foreground = rec ? Brush(0xFF, 0xFF, 0xFF) : r.Halted || r.State == "error" ? Brush(0xFF, 0x6B, 0x6B) : Brush(0xCF, 0xE8, 0xD4);
             RecInfoText.Text = DateTime.Now < _clipShowUntil ? _clipText : RecordingSummary();
             UpdateSaveButton(rec);
             LocationText.Text = string.IsNullOrEmpty(r.Location) ? "Decided when recording starts" : "Now: " + r.Location;
