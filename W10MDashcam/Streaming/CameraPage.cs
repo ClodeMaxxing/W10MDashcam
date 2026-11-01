@@ -309,9 +309,9 @@ function render(){
  // the bars
  bar('blv',live,!w,!live?'OFF':!s?'ON · STARTING':st.viewers>0?'ON · '+vt(st.viewers).toUpperCase():'ON');$('sths').textContent=$('blvs').textContent;
  var pvOn=st.previewing||st.preview||st.keepPreview;
- bar('bpv',pvOn,!w,pvOn?'ON':'OFF');
+ bar('bpv',pvOn,!w,!pvOn?'OFF':st.keepPreview&&!p?'ON · ALWAYS':'ON');
  bar('bss',st.powerSave,!w||p,!st.powerSave?'OFF':p?'ON · HEAT PROTECTION':s?'ON':'ON · WHILE RECORDING');
- bar('btt',st.torchOn,!w||p||!st.torchSupported||!s,st.torchOn?'ON · '+st.torchLeftSec+' s':p?'OFF · HEAT PROTECTION':!st.torchSupported?'OFF · NOT ON THIS CAMERA':!s?'OFF · CAMERA FIRST':'OFF');
+ bar('btt',st.torchOn,!w||p||!st.torchSupported,st.torchOn?'ON · '+st.torchLeftSec+' s':p?'OFF · HEAT PROTECTION':!st.torchSupported?'OFF · NOT ON THIS CAMERA':'OFF');
  // recording options and storage
  sw('roo',r.onOpen,!w);
  var pls=[30,60,120,300,0];if(r.powerLossSec!=null&&pls.indexOf(r.powerLossSec)<0)pls.push(r.powerLossSec);

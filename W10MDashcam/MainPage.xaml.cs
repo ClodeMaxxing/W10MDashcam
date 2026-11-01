@@ -542,14 +542,14 @@ namespace W10MDashcam
             if ((DateTime.Now - _appStarted).TotalSeconds > 20) MarkLaunchHealthy();
             UpdateRecordingUi();
             DisplayTick(); // a preview that disagrees with the black screen is fixed with one restart (MainPage.Display.cs)
-            // keep the flashlight switch in step with the stream: it is only usable while streaming
-            bool torchUsable = _tuning.TorchSupported && _camera != null && _camera.IsStreaming && !_protect;
+            // keep the flashlight switch in step with the camera: usable whenever the camera is open (recording, live or idle)
+            bool torchUsable = _tuning.TorchSupported && _camera?.Capture != null && !_protect;
             if (TorchToggle.IsEnabled != (torchUsable || _torchWanted)) LoadTorchUi();
             if (_torchWanted)
             {
-                if (_camera == null || !_camera.IsStreaming) { _torchWanted = false; LoadTorchUi(); }
+                if (_camera?.Capture == null) { _torchWanted = false; LoadTorchUi(); }
                 else if (DateTime.Now >= _torchOffAt) { SetTorch(false); Log("Flashlight switched off automatically (time limit)"); }
-                else UpdateTorchButton(); // the seconds left
+                else { ApplyTorch(); UpdateTorchButton(); } // the LED again after a camera start/stop re-opened the pipeline; the seconds left
             }
             if (tick % 10 == 0)
             {
@@ -867,6 +867,7 @@ namespace W10MDashcam
 
         // ---- Flashlight (the camera's torch LED). Off whenever the stream stops or restarts; never remembered as "on".
         private bool _torchWanted;
+        private bool _torchPreview; // the preview was started only to carry the LED (camera idle): ended with the flashlight
         private bool _loadingTorchUi = true; // true until the first LoadTorchUi: XAML startup events must not overwrite the saved values
         private DateTime _torchOffAt = DateTime.MaxValue;
         private const int TorchSeconds = 30; // the LED heats the phone fast: a short look in the dark, never a lamp
@@ -876,12 +877,11 @@ namespace W10MDashcam
             _loadingTorchUi = true;
             try
             {
-                bool streaming = _camera != null && _camera.IsStreaming;
-                bool ok = _tuning.TorchSupported && streaming && !_protect;
+                bool open = _camera?.Capture != null;
+                bool ok = _tuning.TorchSupported && open && !_protect;
                 TorchToggle.IsOn = _torchWanted;
                 TorchToggle.IsEnabled = ok || _torchWanted;
-                TorchNote.Text = _protect ? "Locked by heat protection." : _camera == null || !_tuning.TorchSupported && streaming ? (_camera == null ? "" : "This camera has no flashlight control.")
-                    : !streaming ? "Start the stream to use the flashlight."
+                TorchNote.Text = _protect ? "Locked by heat protection." : !open ? "" : !_tuning.TorchSupported ? "This camera has no flashlight control."
                     : "Switches off by itself after 30 seconds.";
             }
             finally { _loadingTorchUi = false; }
@@ -892,15 +892,15 @@ namespace W10MDashcam
         private void UpdateTorchButton()
         {
             if (TorchBar == null) return;
-            bool streaming = _camera != null && _camera.IsStreaming;
+            bool open = _camera?.Capture != null;
             TorchButton.IsEnabled = TorchToggle.IsEnabled;
             TorchBar.Background = _torchWanted ? GreenFill : Brush(0x16, 0x30, 0x1E);
             TorchStateText.Foreground = _torchWanted ? GreenFill : Brush(0x7F, 0xAE, 0x86);
             int left = _torchWanted ? Math.Max(0, (int)Math.Ceiling((_torchOffAt - DateTime.Now).TotalSeconds)) : 0;
             TorchStateText.Text = _torchWanted ? "ON · " + left + " s"
                 : _protect ? "OFF · HEAT PROTECTION"
-                : _camera != null && !_tuning.TorchSupported && streaming ? "OFF · NOT ON THIS CAMERA"
-                : !streaming ? "OFF · STREAM FIRST" : "OFF";
+                : open && !_tuning.TorchSupported ? "OFF · NOT ON THIS CAMERA"
+                : !open ? "OFF · CAMERA CLOSED" : "OFF";
         }
 
         private void TorchButton_Click(object sender, RoutedEventArgs e) => SetTorch(!_torchWanted);
@@ -912,8 +912,11 @@ namespace W10MDashcam
                 var cap = _camera?.Capture;
                 if (cap == null || !_tuning.TorchSupported) return;
                 var t = cap.VideoDeviceController.TorchControl;
-                bool want = _torchWanted && _camera.IsStreaming;
+                bool want = _torchWanted;
                 if (t.Enabled != want) t.Enabled = want;
+                // the LED only burns while a camera pipeline runs: with the camera idle, the preview carries it
+                if (want && !_camera.IsStreaming && !_camera.Previewing) { _torchPreview = true; var _ = _camera.SetPreviewAsync(true); }
+                else if (!want && _torchPreview) { _torchPreview = false; var _ = ApplyDisplayAsync(); } // back to what the switches say
             }
             catch (Exception ex)
             {
@@ -926,9 +929,9 @@ namespace W10MDashcam
         private void SetTorch(bool on)
         {
             if (on && _protect) { Log("Flashlight unavailable: heat protection is on"); on = false; }
-            else if (on && (!_tuning.TorchSupported || _camera == null || !_camera.IsStreaming))
+            else if (on && (!_tuning.TorchSupported || _camera?.Capture == null))
             {
-                Log("Flashlight: start the stream first (or this camera has no flashlight control)");
+                Log("Flashlight: the camera is not open yet (or this camera has no flashlight control)");
                 on = false;
             }
             bool was = _torchWanted;
