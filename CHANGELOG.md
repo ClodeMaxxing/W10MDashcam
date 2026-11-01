@@ -1,5 +1,93 @@
 # Changelog
 
+## W10MDashcam 0.9.5
+
+**The phone screen and the web page redrawn as one**, the design that W10MSecurityCam 1.4 introduced, arranged for a
+dashcam: recording first, streaming folded away. The web page is now a mirror of the phone (the same card, bars and
+drawers; the only differences are the *Log in* button and the web-page switch, which the page cannot turn off, plus the
+recordings list). A tap on a view-only page goes to the login.
+
+- **Status card first**, with the app name as its top band. Its header row is the **recording button**: a tall bar
+  with a green edge light while recording, a pulsing red light, *RECORDING* with the elapsed time / *START RECORDING* /
+  *RECORDING STOPPED* and the format pill (`4K30`, `SAFE`). Under it the phone tiles (battery, Wi-Fi, temperature, CPU,
+  memory, speed, storage, power) and the notices; the recording card with **SAVE CLIP** and the summary line follows.
+- **Streaming drawer** under Camera, closed by default: the FPS / MBPS / VIEWERS tiles, the **Live view (RTSP)** bar
+  button, the RTSP LIVE VIEW and WEB UI groups (a Wi-Fi and a USB row each with the full address; the RTSP rows read
+  *live view off* until live view is on; USB green once a PC has connected, amber *cable?* on external power, grey
+  *no USB*) and *Live stream when the app opens*. The drawer head shows the live state while it is closed.
+- **Preview, Screensaver and Flashlight** are full-width bar buttons with an edge light. *Black screen while streaming*
+  is now called **Screensaver**; Preview and Screensaver exclude each other. The *Preview on the phone* switch, *Show
+  camera picture (60 s)* and *Black out the screen now* are gone: **Preview** shows the picture for 60 s while the
+  camera runs behind the screensaver (one restart, so a new file), otherwise until it is pressed again.
+- **Preview on always** (Power; was *Keep the preview running behind the black screen*) starts the preview when
+  switched on, and the Preview bar then reads *ON · ALWAYS*: no 60 s countdown while it is set.
+- **Drawers** (Recording options, Storage, Video, Camera, Streaming, Power, Network and login, Viewer setup, Details
+  and log) are rounded cards with header bands; every switch is a row with an edge light; the recording and storage
+  choices, resolution, bitrate and keyframe are picker tiles with a themed list; focus, exposure and white balance are
+  value tiles. **Focus once and lock** is an on/off row; **Image stabilization** is a row under Camera (on by
+  default); *Power-saving camera features* and *Hold focus once it has settled* are gone.
+- **Heat protection** is a switch under Power, on by default, with a confirmation before it goes off. Off and hot, a
+  distinct **HOT, no protection** warning (badge, Power alert, web page, log, chime) replaces the intervention.
+- **Viewer setup** drawer (phone and web page): the live-view addresses with the login, NVR notes, VLC, OBS, ffplay.
+- **Flashlight without recording:** it works whenever the camera is open. With the camera idle the preview is started
+  quietly to carry the LED and ended with it. Still 30 s, still locked by heat protection.
+- Recording defaults are unchanged (4K30 at 24 Mbps, the storage rules); the bitrate now follows the resolution across
+  the 1080p line (24 Mbps above, 4 Mbps at or below) when the format is changed.
+- `/camera/state` adds `heatProtect`, `focusLocked`, `autoStart`, `udp`, `snapshot`, `audioOn`, `keyframeSec`,
+  `wifiIp`, `rtspViewersWifi`, `rtspViewersUsb`, `usbSeen`, `usbCable`, `preview`, `keepPreview` and `powerSave`;
+  `/config` gains `heatprotect`, `autostart` and `keyframe`.
+
+0.9.2 to 0.9.4 were the steps of this redesign and were not released.
+
+## W10MDashcam 0.9.1
+
+**Preview and black screen, one rule set in all three apps** (`MainPage.Display.cs`, kept in step by Sync-Core):
+- **Preview on the phone** is a switch under *Camera*, **off by default**. On: the picture while stopped, and while
+  streaming unless the screen is blacked out.
+- **Black screen while streaming** also stops the preview. New under *Power*: **Keep the preview running behind the
+  black screen** (off by default: it costs CPU and heat), so a tap on the black screen shows the picture at once;
+  heat protection forces it off and puts it back afterwards.
+- Adjusting the camera on the phone shows the picture for 60 s as before; **a tap on the dark preview area** does the
+  same as *Show camera picture*. The recording-problem and power-loss banners lift the black screen through the same
+  rules. A preview that disagrees with the black screen is fixed with one restart, so the screen can no longer go
+  black with the preview still running.
+- The manual focus / exposure / white balance sliders are always on screen, greyed while automatic.
+- The web page and `/config` gain `preview=on|off` and `keeppreview=on|off`.
+
+## W10MDashcam 0.9
+
+Feature parity with W10MSecurityCam and W10MWebCam: what one app of the family did better now exists in all three where
+it applies. Recording, crash detection, GPS and live view are unchanged.
+
+**What you notice**
+- **The battery tile turns red when the battery is draining although the phone says "Charging"** (a PC USB port or a
+  small car adapter with 4K), judged every second from the power reading: Charging and the 5-minute average below
+  −0.3 W. Before, the level had to drop 2 % over 20 minutes while the *Charger insufficient* notice was already up. The
+  notice now also appears in `/status` (`chargerNotice`), and the web page's battery bar turns red too.
+- **Temp badge in three levels:** *Paused* (amber) the moment charging pauses, *Hot* (red) after 20 s, *Protect* (red)
+  while heat protection is on. Before, a one-second pause flashed the badge red.
+- **A chime and a vibration** when heat protection sets in (the same as a power loss), and a short one when charging
+  resumes.
+- **View only without the login:** the page, `/camera/state`, `/status`, the recordings list, the log and the stats can
+  be read on the home network without logging in; changes, the snapshot, the recordings themselves (play, download,
+  captions) and `/login` need the login (the browser asks). The page shows a *View only* notice with a *Log in* button.
+  The settings page is now served at `/` as well (the log is at `/log`); a switched-off web, log or stats page
+  answers 403 (was 503 / 404).
+- The phone's **addresses follow network changes** (a new DHCP lease, another Wi-Fi network).
+- **Return to normal mode** button on the phone while the app is in safe mode; before, only the web page could do that.
+
+**Under the hood**
+- `/status` also carries W10MWebCam's field names (`uptime`, `battery`, `charging`, `onExternalPower`, `latencyMs`,
+  `wifiBars`, `cpuPhone`, `cpuApp`, `heat`, `heatBadge`, `heatLevel`, `protect`, `alert`, `blackout`, `previewing`,
+  `torchOn`, `webOn`, `logOn`, `statsOn`, ...); the older names stay. `charging` means current flows in (Charging), the
+  new `onExternalPower` means a charger is connected (Charging or Idle); the low-battery text looks at the latter.
+- Three previous sessions' logs are kept (`log-previous.txt`, `-2`, `-3`), each headed CRASHED, closed normally or
+  ended abruptly; a clean close writes "App suspended" so the difference can be told.
+- `tools\Soak-Monitor.ps1` is the same script in all three repositories (reads `/status` without a login, collects the
+  phone log every 5 minutes while the log page is on); `tools\Make-Release.ps1` packs the release zip and SHA256SUMS.
+- The battery and charger rules moved to `MainPage.Power.cs` (with the chime and vibration helpers), the same file as
+  in W10MSecurityCam.
+
 ## W10MDashcam 0.8.1
 
 Small follow-up to 0.8; recording, live view and crash detection are unchanged.

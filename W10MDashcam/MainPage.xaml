@@ -18,15 +18,200 @@
             <Setter Property="CharacterSpacing" Value="60" />
             <Setter Property="Foreground" Value="#6F8F77" />
         </Style>
+        <Style x:Key="TileBig" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
         <Style x:Key="TileValue" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="Foreground" Value="#D6E8D9" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
+        <!-- The recording light: a slow fade while streaming (as the W10MDashcam REC light). -->
         <Storyboard x:Name="DotPulse" RepeatBehavior="Forever" AutoReverse="True">
-            <DoubleAnimation Storyboard.TargetName="StatusDot" Storyboard.TargetProperty="Opacity" From="1" To="0.3" Duration="0:0:1" />
+            <DoubleAnimation Storyboard.TargetName="RecDot" Storyboard.TargetProperty="Opacity" From="1" To="0.25" Duration="0:0:1.2" />
         </Storyboard>
+        <!-- The settings drawers: a rounded card like the status card, a header band that opens and closes it (Fold_Tapped),
+             the body inside. Rows inside use RowSwitch (a switch drawn as an edge-light row) and Field (a tile). -->
+        <Style x:Key="Drawer" TargetType="Border">
+            <Setter Property="Background" Value="#071109" />
+            <Setter Property="BorderBrush" Value="#1F3A26" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+        <Style x:Key="DrawerHead" TargetType="Border">
+            <Setter Property="Background" Value="#0A160D" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="10,10,10,10" />
+        </Style>
+        <Style x:Key="DrawerHeadText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CharacterSpacing" Value="80" />
+            <Setter Property="Foreground" Value="#A8F0B0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Field" TargetType="Border">
+            <Setter Property="Background" Value="#0A160D" />
+            <Setter Property="BorderBrush" Value="#142A1A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="9,5,9,7" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <!-- Dropdowns in the theme: green text on the tile, and the list that opens as a dark green card (the theme brushes
+             below are what the ComboBox template looks up). -->
+        <SolidColorBrush x:Key="ComboBoxBackground" Color="#0A160D" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#0E2014" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#0E2014" />
+        <SolidColorBrush x:Key="ComboBoxForeground" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxForegroundPointerOver" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxForegroundPressed" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="Transparent" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="Transparent" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="Transparent" />
+        <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#3FBF5F" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#071109" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#39FF14" />
+        <SolidColorBrush x:Key="ComboBoxDropDownForeground" Color="#9CC3A2" />
+        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#9CC3A2" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="#CFFFD2" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#0E2014" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#163A1E" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#163A1E" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#1A4424" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#1A4424" />
+        <!-- Picker tiles (Resolution, Bitrate, Keyframe): a Field-looking button; its list opens as a themed flyout. -->
+        <Style x:Key="PickButton" TargetType="Button">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="#0A160D" />
+            <Setter Property="BorderBrush" Value="#142A1A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="9,5,9,6" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style x:Key="PickValue" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#CFFFD2" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+        <Style x:Key="ValueNote" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="#7FAE86" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="PickFlyout" TargetType="FlyoutPresenter">
+            <Setter Property="Background" Value="#071109" />
+            <Setter Property="BorderBrush" Value="#39FF14" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="230" />
+            <Setter Property="MaxHeight" Value="420" />
+        </Style>
+        <Style x:Key="PickItem" TargetType="ListViewItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <DataTemplate x:Key="PickRow">
+            <Grid Background="{Binding Back, FallbackValue=#071109}" MinHeight="38">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Border Width="3" Background="{Binding Light, FallbackValue=#071109}" CornerRadius="0,2,2,0" Margin="0,9,12,9" />
+                <TextBlock Grid.Column="1" Text="{Binding Text}" Foreground="{Binding Fore, FallbackValue=#CFFFD2}" FontFamily="Consolas" FontSize="13" VerticalAlignment="Center" Margin="0,0,14,0" />
+            </Grid>
+        </DataTemplate>
+        <!-- The Auto / Manual segment on a camera tile (the code colours the active half). -->
+        <Style x:Key="Seg" TargetType="Border">
+            <Setter Property="BorderBrush" Value="#1F3A26" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Background" Value="#0A160D" />
+        </Style>
+        <Style x:Key="SegL" TargetType="Border"><Setter Property="CornerRadius" Value="9,0,0,9" /><Setter Property="Padding" Value="9,2,9,3" /></Style>
+        <Style x:Key="SegR" TargetType="Border"><Setter Property="CornerRadius" Value="0,9,9,0" /><Setter Property="Padding" Value="9,2,9,3" /></Style>
+        <Style x:Key="SegText" TargetType="TextBlock"><Setter Property="FontSize" Value="10" /><Setter Property="Foreground" Value="#7FAE86" /></Style>
+        <Style x:Key="ThemedCombo" TargetType="ComboBox">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#CFFFD2" />
+            <Setter Property="Background" Value="#0A160D" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,2,0,2" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Margin" Value="0,1,0,0" />
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CharacterSpacing" Value="60" />
+            <Setter Property="Foreground" Value="#6F8F77" />
+        </Style>
+        <!-- A ToggleSwitch drawn as a row: edge light (green when on), the header, ON / OFF on the right. Same look as the
+             Preview / Screensaver / Flashlight buttons; the code behind keeps using IsOn / IsEnabled / Toggled as before. -->
+        <Style x:Key="RowSwitch" TargetType="ToggleSwitch">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleSwitch">
+                        <Grid x:Name="RowRoot" Tapped="RowSwitch_Tapped">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver" />
+                                        <VisualState x:Name="Pressed" />
+                                        <VisualState x:Name="Disabled">
+                                            <Storyboard><DoubleAnimation Storyboard.TargetName="RowRoot" Storyboard.TargetProperty="Opacity" To="0.45" Duration="0" /></Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="ToggleStates">
+                                        <VisualState x:Name="Dragging" />
+                                        <VisualState x:Name="Off" />
+                                        <VisualState x:Name="On">
+                                            <Storyboard>
+                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RowLight" Storyboard.TargetProperty="Background">
+                                                    <DiscreteObjectKeyFrame KeyTime="0"><DiscreteObjectKeyFrame.Value><SolidColorBrush Color="#39FF14" /></DiscreteObjectKeyFrame.Value></DiscreteObjectKeyFrame>
+                                                </ObjectAnimationUsingKeyFrames>
+                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RowOff" Storyboard.TargetProperty="Visibility"><DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed" /></ObjectAnimationUsingKeyFrames>
+                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RowOn" Storyboard.TargetProperty="Visibility"><DiscreteObjectKeyFrame KeyTime="0" Value="Visible" /></ObjectAnimationUsingKeyFrames>
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="ContentStates">
+                                        <VisualState x:Name="OffContent" />
+                                        <VisualState x:Name="OnContent" />
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            <Border Background="#0A160D" BorderBrush="#142A1A" BorderThickness="1" CornerRadius="6" MinHeight="40" />
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Border x:Name="RowLight" Width="4" CornerRadius="0,2,2,0" Background="#16301E" Margin="0,7,10,7" />
+                                <ContentPresenter x:Name="HeaderContentPresenter" Grid.Column="1" Content="{TemplateBinding Header}" Foreground="#D8F5DC" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,7,8,8" />
+                                <TextBlock x:Name="RowOff" Grid.Column="2" Text="OFF" FontFamily="Consolas" FontSize="11" Foreground="#7FAE86" VerticalAlignment="Center" Margin="0,0,9,0" />
+                                <TextBlock x:Name="RowOn" Grid.Column="2" Text="ON" FontFamily="Consolas" FontSize="11" Foreground="#39FF14" VerticalAlignment="Center" Margin="0,0,9,0" Visibility="Collapsed" />
+                            </Grid>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="FoldButton" TargetType="Button">
             <Setter Property="Background" Value="#0B1A10" />
             <Setter Property="BorderThickness" Value="3,0,0,1" />
@@ -39,7 +224,91 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
         </Style>
-        <!-- A small (i) at the top right of a setting: its explanation opens in a pop-up instead of taking space. -->
+        <!-- Plain action buttons: dark green with a soft green edge. -->
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#123320" />
+            <Setter Property="Foreground" Value="#CFFFD8" />
+            <Setter Property="BorderBrush" Value="#2E7D46" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <!-- Service pills under the start button: one line per transport (W10MSecurityCam and W10MWebCam). -->
+        <Style x:Key="ServicePill" TargetType="Border">
+            <Setter Property="Background" Value="#0B1A10" />
+            <Setter Property="BorderBrush" Value="#2E7D46" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="8,2,9,3" />
+            <Setter Property="Margin" Value="0,0,0,3" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <!-- A full-width button with a short light on its left edge: green while the thing is on, dark while off
+             (the stream, Preview, Screensaver, Flashlight; the same in W10MDashcam / W10MWebCam). The code sets the light and
+             the state text. The content grid's first column is the BarLight border. -->
+        <Style x:Key="BarButton" TargetType="Button">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="#0A160D" />
+            <Setter Property="BorderBrush" Value="#1F3A26" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="0,7,10,7" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style x:Key="BarName" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#D8F5DC" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="BarState" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="Foreground" Value="#7FAE86" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+        <Style x:Key="BarLight" TargetType="Border">
+            <Setter Property="Width" Value="4" />
+            <Setter Property="CornerRadius" Value="0,2,2,0" />
+            <Setter Property="Background" Value="#16301E" />
+            <Setter Property="Margin" Value="0,1,10,1" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+        <!-- A group of service rows (RTSP, WEB UI) with a small label on top. -->
+        <Style x:Key="ServiceGroup" TargetType="Border">
+            <Setter Property="Background" Value="#07140B" />
+            <Setter Property="BorderBrush" Value="#1F3A26" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="6,4,6,2" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style x:Key="ServiceGroupLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="CharacterSpacing" Value="80" />
+            <Setter Property="Foreground" Value="#7FAE86" />
+            <Setter Property="Margin" Value="2,0,0,3" />
+        </Style>
+        <Style x:Key="PillLabel" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#8FB596" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Width" Value="36" />
+        </Style>
+        <Style x:Key="PillDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="7" />
+            <Setter Property="Height" Value="7" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Fill" Value="#555555" />
+        </Style>
+        <Style x:Key="PillText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#9CF0B0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- A small (i) at the top right of a setting: its explanation opens in a pop-up instead of taking space (as in W10MDashcam / W10MWebCam). -->
         <Style x:Key="InfoButton" TargetType="Button">
             <Setter Property="Content" Value="&#x24D8;" />
             <Setter Property="FontSize" Value="17" />
@@ -57,13 +326,6 @@
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="MaxWidth" Value="300" />
         </Style>
-        <!-- Plain action buttons: dark green with a soft green edge. -->
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#123320" />
-            <Setter Property="Foreground" Value="#CFFFD8" />
-            <Setter Property="BorderBrush" Value="#2E7D46" />
-            <Setter Property="BorderThickness" Value="1" />
-        </Style>
     </Page.Resources>
 
     <Grid>
@@ -73,78 +335,42 @@
         </Grid.ColumnDefinitions>
 
         <CaptureElement x:Name="PreviewElement" Stretch="Uniform" />
-        <TextBlock x:Name="PreviewOffText" Text="Preview off" Foreground="#888"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+        <!-- The dark preview area: a tap shows the picture for 60 s, like Show camera picture (MainPage.Display.cs). -->
+        <Grid x:Name="PreviewTapArea" Background="Transparent" Tapped="PreviewArea_Tapped">
+            <TextBlock x:Name="PreviewOffText" Text="Preview off" Foreground="#6F8F77" TextWrapping="Wrap" TextAlignment="Center"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" Margin="12" />
+        </Grid>
 
         <ScrollViewer Grid.Column="1" Background="#050805" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="10,6,10,10">
-                <Grid Margin="0,0,0,8">
-                    <TextBlock x:Name="TitleText" Text="W10MDashcam" FontSize="20" FontWeight="SemiBold" Foreground="#E4F5E7" VerticalAlignment="Bottom" />
-                    <TextBlock x:Name="VersionText" Text="" FontSize="11" FontWeight="Bold" Foreground="#39FF14" HorizontalAlignment="Right" VerticalAlignment="Top" />
-                </Grid>
-
                 <!-- MAIN: what is needed day to day. Everything else folds away below. -->
-                <!-- Recording and live view are separate: the camera runs while either one is on. -->
-                <Grid Margin="0,0,0,6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="6" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Button x:Name="RecordButton" Content="Start recording" HorizontalAlignment="Stretch" FontSize="13"
-                            Click="RecordButton_Click" IsEnabled="False" />
-                    <Button x:Name="StartButton" Grid.Column="2" Content="Start streaming" HorizontalAlignment="Stretch" FontSize="13"
-                            Click="LiveButton_Click" IsEnabled="False" />
-                </Grid>
-                <!-- Aiming the camera: the picture for 60 s after the last touch, then the black screen again (MainPage.xaml.cs). -->
-                <Button x:Name="ShowPictureButton" Content="Show camera picture (60 s)" HorizontalAlignment="Stretch"
-                        Margin="0,-2,0,6" Click="ShowPictureButton_Click" />
-                <!-- Dashcam recording card: REC state, the Save clip button, storage summary. -->
-                <Border Background="#140707" BorderBrush="#3A1F1F" BorderThickness="1" CornerRadius="6" Padding="10,8,10,8" Margin="0,0,0,6">
+                <!-- Status card, first: the app name as its top band, then its header row (recording light, REC state, the format),
+                     which is the button that starts and stops recording (RecordButton; UpdateRecordingUi / UpdateRunButtons),
+                     then the live-view numbers and the tiles. Recording and live view are separate: the camera runs while either is on. -->
+                <Border Background="#07140B" BorderBrush="#1F3A26" BorderThickness="1" CornerRadius="6" Padding="10,0,10,8" Margin="0,0,0,6">
                     <StackPanel>
-                        <!-- Shown when recording has stopped by itself (storage full, too slow, card missing): a warning that cannot be missed. -->
-                        <Border x:Name="IncidentBorder" Visibility="Collapsed" Background="#B00020" BorderBrush="#FF6B6B" BorderThickness="1"
-                                CornerRadius="4" Padding="10,8,10,8" Margin="0,0,0,8">
-                            <StackPanel>
-                                <TextBlock x:Name="IncidentText" Text="" FontSize="14" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
-                                <Button x:Name="IncidentResumeButton" Content="RESUME RECORDING" HorizontalAlignment="Stretch" Margin="0,8,0,0"
-                                        FontWeight="Bold" Background="#FFFFFF" Foreground="#B00020" Click="IncidentResumeButton_Click" />
-                            </StackPanel>
-                        </Border>
-                        <!-- Shown when the charger goes: a countdown before recording stops to save the battery (Recording options). -->
-                        <Border x:Name="PowerLossBorder" Visibility="Collapsed" Background="#7A3A00" BorderBrush="#FFB040" BorderThickness="1"
-                                CornerRadius="4" Padding="10,8,10,8" Margin="0,0,0,8">
-                            <StackPanel>
-                                <TextBlock x:Name="PowerLossMessage" Text="" FontSize="14" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
-                                <Button x:Name="PowerLossButton" Content="KEEP RECORDING" HorizontalAlignment="Stretch" Margin="0,8,0,0"
-                                        FontWeight="Bold" Background="#FFFFFF" Foreground="#7A3A00" Click="PowerLossButton_Click" />
-                            </StackPanel>
-                        </Border>
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse x:Name="RecDot" Width="10" Height="10" Fill="#555555" VerticalAlignment="Center" Margin="0,0,7,0" />
-                            <TextBlock x:Name="RecStateText" Text="OFF" FontSize="13" FontWeight="SemiBold" Foreground="#F0B0B0" CharacterSpacing="60" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <Button x:Name="SaveClipButton" Content="SAVE CLIP" HorizontalAlignment="Stretch" FontWeight="Bold" Margin="0,6,0,4"
-                                Background="#5A1010" Foreground="#FFE0E0" BorderBrush="#A03030" Click="SaveClipButton_Click" IsEnabled="False" />
-                        <TextBlock x:Name="RecInfoText" Text="" FontSize="11" Foreground="#C9B0B0" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-                <!-- Status card: state dot and label, resolution and viewer pills, then the big numbers. -->
-                <Border Background="#07140B" BorderBrush="#1F3A26" BorderThickness="1" CornerRadius="6" Padding="10,8,10,8" Margin="0,0,0,6">
-                    <StackPanel>
-                        <Grid>
-                            <StackPanel Orientation="Horizontal">
-                                <Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="#555555" VerticalAlignment="Center" Margin="0,0,7,0" />
-                                <TextBlock x:Name="StateText" Text="STOPPED" FontSize="13" FontWeight="SemiBold" Foreground="#9CF0B0" CharacterSpacing="60" VerticalAlignment="Center" />
-                                <Border x:Name="ResPill" BorderBrush="#2E7D46" BorderThickness="1" CornerRadius="9" Background="#0B1A10" Padding="6,0,6,1" Margin="7,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
-                                    <TextBlock x:Name="ResText" FontSize="11" Foreground="#9CF0B0" />
-                                </Border>
-                            </StackPanel>
-                            <Border BorderBrush="#2E7D46" BorderThickness="1" CornerRadius="9" Background="#0B1A10" Padding="6,0,6,1" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <TextBlock x:Name="ViewersText" Text="0 viewers" FontSize="11" Foreground="#9CF0B0" />
-                            </Border>
+                        <Grid Margin="-10,0,-10,0" Padding="10,6,10,5" Background="#050A06" BorderBrush="#1F3A26" BorderThickness="0,0,0,1">
+                            <TextBlock x:Name="TitleText" Text="W10MDashcam" FontSize="20" FontWeight="SemiBold" Foreground="#E4F5E7" VerticalAlignment="Bottom" />
+                            <TextBlock x:Name="VersionText" Text="" FontSize="11" FontWeight="Bold" Foreground="#39FF14" HorizontalAlignment="Right" VerticalAlignment="Top" />
                         </Grid>
-                        <TextBlock x:Name="StatsText" Text="" FontFamily="Consolas" FontSize="20" Foreground="#E4F5E7" Margin="0,6,0,0" Visibility="Collapsed" />
+                        <!-- The recording button: a tall bar like the Preview / Screensaver bars (edge light green while recording, the red
+                             light pulsing, RECORDING with the elapsed time, the format pill). Fixed height, so the card never jumps between states. -->
+                        <Border Style="{StaticResource Drawer}" Background="#0F2416" BorderBrush="#1F4A2A" Margin="0,8,0,2">
+                            <Button x:Name="RecordButton" Style="{StaticResource BarButton}" Background="Transparent" BorderThickness="0" Height="46" Margin="0" Click="RecordButton_Click" IsEnabled="False">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <Border x:Name="StreamBar" Style="{StaticResource BarLight}" Margin="0,9,12,9" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <Ellipse x:Name="RecDot" Width="12" Height="12" Fill="#3A1414" Stroke="#5A2020" StrokeThickness="1" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                        <TextBlock x:Name="RecStateText" Text="START RECORDING" FontSize="15" FontWeight="SemiBold" Foreground="#CFE8D4" CharacterSpacing="40" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock x:Name="RecTimeText" Text="" FontSize="11" Foreground="#7FAE86" VerticalAlignment="Center" Margin="8,1,0,0" />
+                                    </StackPanel>
+                                    <Border x:Name="ResPill" Grid.Column="2" BorderBrush="#2A4A32" BorderThickness="1" CornerRadius="9" Background="#0B1A10" Padding="7,0,7,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="ResText" Text="-" FontFamily="Consolas" FontSize="11" Foreground="#8FB596" />
+                                    </Border>
+                                </Grid>
+                            </Button>
+                        </Border>
                         <Grid Margin="-2,6,-2,0">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
@@ -255,174 +481,527 @@
                     </StackPanel>
                 </Border>
                 <TextBlock x:Name="AlertText" Text="" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,0,0,4" />
-                <Button x:Name="PowerSaveButton" Content="Black out the screen now" HorizontalAlignment="Stretch"
-                        Margin="0,0,0,6" Click="PowerSaveButton_Click" />
+                <!-- Safe mode (the MP4 engine after a crash or two stalls): the way back, as on the web page. -->
+                <Button x:Name="NormalModeButton" Content="Return to normal mode (low-latency engine)" HorizontalAlignment="Stretch" Visibility="Collapsed"
+                        Margin="0,2,0,4" Click="NormalModeButton_Click" Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
 
-                <Button Style="{StaticResource FoldButton}" Tag="RecordingPanel|RECORDING OPTIONS" Content="RECORDING OPTIONS  &#x25B8;" Click="Fold_Click" />
-                <StackPanel x:Name="RecordingPanel" Visibility="Collapsed">
-                    <ToggleSwitch x:Name="RecordOnOpenToggle" Header="Record when the app opens" IsOn="True" Toggled="RecordOnOpenToggle_Toggled" />
-                    <Grid>
-                        <ComboBox x:Name="PowerLossBox" Header="Stop when the power is lost" SelectionChanged="PowerLossBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="When the charger is disconnected (the car is switched off), a countdown shows on the screen. When it ends, recording and live view stop so the battery is not run flat; they start again when the power returns. Keep recording on the countdown skips it once. Never: keep recording on battery." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <ComboBox x:Name="SegmentBox" Header="New file every" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <Grid>
-                        <ComboBox x:Name="ImpactBox" Header="Crash detection" SelectionChanged="ImpactBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="On a jolt above the chosen level, the current file, the one before and the next one are saved. Taps on the screen within 2 s don't count. The camera button saves a clip too." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <TextBlock x:Name="ImpactText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,6" />
-                    <ToggleSwitch x:Name="KeepNextToggle" Header="Save clip also keeps the next file" IsOn="True" Toggled="KeepNextToggle_Toggled" />
-                    <ToggleSwitch x:Name="GpsToggle" Header="GPS speed and position" IsOn="True" Toggled="GpsToggle_Toggled" />
-                    <TextBlock x:Name="GpsText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,-4,0,4" />
-                    <ComboBox x:Name="UnitsBox" Header="Speed in" SelectionChanged="UnitsBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
-                    <Grid>
-                        <ToggleSwitch x:Name="SubtitlesToggle" Header="Time, speed and position in recordings" IsOn="True" Toggled="SubtitlesToggle_Toggled" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="A subtitle track inside each recording: date and time, speed, position and IMPACT markers. VLC and most players show it (Subtitle menu); the web page can also download it as an .srt file." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                </StackPanel>
-
-                <Button Style="{StaticResource FoldButton}" Tag="StoragePanel|STORAGE" Content="STORAGE  &#x25B8;" Click="Fold_Click" />
-                <StackPanel x:Name="StoragePanel" Visibility="Collapsed">
-                    <TextBlock x:Name="StorageText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,4,0,6" />
-                    <Grid>
-                        <ComboBox x:Name="LocationBox" Header="Save recordings to" SelectionChanged="LocationBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,4" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Automatic uses the SD card when there is one, and the phone's storage when the card is missing or full. Avoid folders inside Videos, Pictures or Music: Windows indexes them, which slows recording down. Recordings can be watched and downloaded on the web page (/camera)." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <Button x:Name="ChooseFolderButton" Content="Choose folder..." HorizontalAlignment="Stretch" Click="ChooseFolderButton_Click" Margin="0,0,0,2" />
-                    <TextBlock x:Name="LocationText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,6" />
-                    <Grid>
-                        <ComboBox x:Name="LimitBox" Header="Space for loop recording" SelectionChanged="RecSetting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="The oldest loop recordings are deleted to stay within this space. Automatic gives them what the storage has left after the saved clips and a small reserve. Files the app did not record are never touched." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <Grid>
-                        <ComboBox x:Name="SavedLimitBox" Header="Space for saved clips" SelectionChanged="SavedLimitBox_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,2" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Saved clips (Save clip, the camera button, crash detection, Keep on the web page) are never deleted by loop recording. Automatic: about a fifth of the storage, 1 to 8 GB." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <ToggleSwitch x:Name="ReplaceSavedToggle" Header="Replace the oldest saved clips when full" IsOn="False" Toggled="ReplaceSavedToggle_Toggled" />
-                    <Grid Margin="0,2,0,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="6" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="DeleteAllButton" Content="Delete all..." HorizontalAlignment="Stretch" FontSize="13" Click="DeleteAllButton_Click"
-                                Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
-                        <Button x:Name="FormatSdButton" Grid.Column="2" Content="Format SD..." HorizontalAlignment="Stretch" FontSize="13" Click="FormatSdButton_Click"
-                                Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
-                    </Grid>
-                </StackPanel>
-
-                <Button Style="{StaticResource FoldButton}" Tag="VideoPanel|VIDEO" Content="VIDEO  &#x25B8;" Click="Fold_Click" />
-                <StackPanel x:Name="VideoPanel" Visibility="Collapsed">
-                    <TextBlock x:Name="VideoAlert" Text="Heat protection: 1080p / 6 Mbps" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
-                    <ComboBox x:Name="ResolutionBox" Header="Resolution" SelectionChanged="Setting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <ComboBox x:Name="BitrateBox" Header="Bitrate" SelectionChanged="Setting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <Grid>
-                        <ToggleSwitch x:Name="HighBwToggle" Header="High bandwidth (over 24 Mbps)" IsOn="False" Toggled="HighBwToggle_Toggled" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Unlocks bitrates above 24 Mbps. The live stream needs 5 GHz Wi-Fi or USB-C; on 2.4 GHz it drops frames." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <ComboBox x:Name="KeyframeBox" Header="Keyframe every" SelectionChanged="Setting_Changed" HorizontalAlignment="Stretch" Margin="0,0,0,6" />
-                    <ToggleSwitch x:Name="AudioToggle" Header="Microphone audio (AAC)" IsOn="False" Toggled="AudioToggle_Toggled" />
-                </StackPanel>
-
-                <Button Style="{StaticResource FoldButton}" Tag="CameraPanel|CAMERA" Content="CAMERA  &#x25B8;" Click="Fold_Click" />
-                <StackPanel x:Name="CameraPanel" Visibility="Collapsed">
-                    <ToggleSwitch x:Name="AutoCameraCheck" Header="Automatic focus, exposure and white balance" IsOn="True" Toggled="AutoCameraCheck_Changed" />
-                    <Button x:Name="FocusOnceButton" Content="Focus once and lock" Click="FocusOnceButton_Click" HorizontalAlignment="Stretch" Margin="0,2,0,4" />
-                    <TextBlock x:Name="TuningStateText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="0,0,0,4" />
-                    <!-- Shown while at least one setting is manual. Each row: label + its own Auto box, then the slider
-                         (greyed out while that setting is automatic). All three on Auto hides this panel again. -->
-                    <StackPanel x:Name="ManualCameraPanel" Visibility="Collapsed">
-                        <!-- Each setting: its value as the switch's header, Auto / Manual, then the slider (greyed out on Auto). -->
-                        <TextBlock x:Name="FocusLabel" Text="Focus" FontSize="12" Margin="0,4,0,0" />
-                        <ToggleSwitch x:Name="FocusAutoCheck" OnContent="Auto" OffContent="Manual" Toggled="SubAuto_Changed" Margin="0,-6,0,-6" />
-                        <Slider x:Name="FocusSlider" Minimum="0" Maximum="100" StepFrequency="1" Margin="0,-6,0,0" ValueChanged="TuningSlider_ValueChanged" />
-                        <TextBlock x:Name="ExposureLabel" Text="Exposure" FontSize="12" />
-                        <ToggleSwitch x:Name="ExposureAutoCheck" OnContent="Auto" OffContent="Manual" Toggled="SubAuto_Changed" Margin="0,-6,0,-6" />
-                        <Slider x:Name="ExposureSlider" Minimum="0" Maximum="100" StepFrequency="0.5" Margin="0,-6,0,0" ValueChanged="TuningSlider_ValueChanged" />
-                        <TextBlock x:Name="WbLabel" Text="White balance" FontSize="12" />
-                        <ToggleSwitch x:Name="WbAutoCheck" OnContent="Auto" OffContent="Manual" Toggled="SubAuto_Changed" Margin="0,-6,0,-6" />
-                        <Slider x:Name="WbSlider" Minimum="2000" Maximum="8000" StepFrequency="100" Margin="0,-6,0,0" ValueChanged="TuningSlider_ValueChanged" />
+                <!-- Dashcam recording card: the incident and power-loss banners, Save clip, the storage summary. -->
+                <Border Background="#140707" BorderBrush="#3A1F1F" BorderThickness="1" CornerRadius="8" Padding="10,8,10,8" Margin="0,0,0,6">
+                    <StackPanel>
+                        <!-- Shown when recording has stopped by itself (storage full, too slow, card missing): a warning that cannot be missed. -->
+                        <Border x:Name="IncidentBorder" Visibility="Collapsed" Background="#B00020" BorderBrush="#FF6B6B" BorderThickness="1"
+                                CornerRadius="4" Padding="10,8,10,8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock x:Name="IncidentText" Text="" FontSize="14" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
+                                <Button x:Name="IncidentResumeButton" Content="RESUME RECORDING" HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                                        FontWeight="Bold" Background="#FFFFFF" Foreground="#B00020" Click="IncidentResumeButton_Click" />
+                            </StackPanel>
+                        </Border>
+                        <!-- Shown when the charger goes: a countdown before recording stops to save the battery (Recording options). -->
+                        <Border x:Name="PowerLossBorder" Visibility="Collapsed" Background="#7A3A00" BorderBrush="#FFB040" BorderThickness="1"
+                                CornerRadius="4" Padding="10,8,10,8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock x:Name="PowerLossMessage" Text="" FontSize="14" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
+                                <Button x:Name="PowerLossButton" Content="KEEP RECORDING" HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                                        FontWeight="Bold" Background="#FFFFFF" Foreground="#7A3A00" Click="PowerLossButton_Click" />
+                            </StackPanel>
+                        </Border>
+                        <Button x:Name="SaveClipButton" Content="SAVE CLIP" HorizontalAlignment="Stretch" FontWeight="Bold" Margin="0,0,0,4"
+                                Background="#5A1010" Foreground="#FFE0E0" BorderBrush="#A03030" Click="SaveClipButton_Click" IsEnabled="False" />
+                        <TextBlock x:Name="RecInfoText" Text="" FontSize="11" Foreground="#C9B0B0" TextWrapping="Wrap" />
                     </StackPanel>
-                    <TextBlock x:Name="TorchAlert" Text="Heat protection: flashlight locked" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
-                    <ToggleSwitch x:Name="TorchToggle" Header="Flashlight" IsOn="False" Toggled="TorchToggle_Toggled" />
-                    <TextBlock x:Name="TorchNote" Text="" Foreground="#7F9A86" FontSize="12" TextWrapping="Wrap" Margin="0,-4,0,4" />
+                </Border>
+
+                <!-- Preview, Screensaver and Flashlight: light-bar buttons (MainPage.Display.cs). The hidden switches below hold the state. -->
+                <Border Style="{StaticResource Drawer}">
+                    <Button x:Name="PreviewButton" Style="{StaticResource BarButton}" Background="Transparent" BorderThickness="0" Height="46" Margin="0" Click="PreviewButton_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Border x:Name="PreviewBar" Style="{StaticResource BarLight}" Margin="0,9,10,9" />
+                            <TextBlock Grid.Column="1" Text="Preview" Style="{StaticResource BarName}" />
+                            <TextBlock x:Name="PreviewStateText" Grid.Column="2" Text="OFF" Style="{StaticResource BarState}" />
+                        </Grid>
+                    </Button>
+                </Border>
+                <Border Style="{StaticResource Drawer}">
+                    <Button x:Name="ScreensaverButton" Style="{StaticResource BarButton}" Background="Transparent" BorderThickness="0" Height="46" Margin="0" Click="ScreensaverButton_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Border x:Name="ScreensaverBar" Style="{StaticResource BarLight}" Margin="0,9,10,9" />
+                            <TextBlock Grid.Column="1" Text="Screensaver" Style="{StaticResource BarName}" />
+                            <TextBlock x:Name="ScreensaverStateText" Grid.Column="2" Text="ON" Style="{StaticResource BarState}" />
+                        </Grid>
+                    </Button>
+                </Border>
+                <Border Style="{StaticResource Drawer}">
+                    <Button x:Name="TorchButton" Style="{StaticResource BarButton}" Background="Transparent" BorderThickness="0" Height="46" Margin="0" Click="TorchButton_Click" IsEnabled="False">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Border x:Name="TorchBar" Style="{StaticResource BarLight}" Margin="0,9,10,9" />
+                            <TextBlock Grid.Column="1" Text="Flashlight" Style="{StaticResource BarName}" />
+                            <TextBlock x:Name="TorchStateText" Grid.Column="2" Text="OFF" Style="{StaticResource BarState}" />
+                        </Grid>
+                    </Button>
+                </Border>
+                <StackPanel Visibility="Collapsed">
+                    <ComboBox x:Name="ResolutionBox" SelectionChanged="Setting_Changed" />
+                    <ComboBox x:Name="BitrateBox" SelectionChanged="Setting_Changed" />
+                    <ComboBox x:Name="KeyframeBox" SelectionChanged="Setting_Changed" />
+                    <ComboBox x:Name="PowerLossBox" SelectionChanged="PowerLossBox_Changed" />
+                    <ComboBox x:Name="SegmentBox" SelectionChanged="RecSetting_Changed" />
+                    <ComboBox x:Name="ImpactBox" SelectionChanged="ImpactBox_Changed" />
+                    <ComboBox x:Name="UnitsBox" SelectionChanged="UnitsBox_Changed" />
+                    <ComboBox x:Name="LocationBox" SelectionChanged="LocationBox_Changed" />
+                    <ComboBox x:Name="LimitBox" SelectionChanged="RecSetting_Changed" />
+                    <ComboBox x:Name="SavedLimitBox" SelectionChanged="SavedLimitBox_Changed" />
+                    <ToggleSwitch x:Name="PreviewToggle" Toggled="PreviewToggle_Toggled" />
+                    <ToggleSwitch x:Name="PowerSaveToggle" IsOn="True" Toggled="PowerSaveToggle_Toggled" />
+                    <TextBlock x:Name="TorchAlert" Text="Heat protection: flashlight locked" Visibility="Collapsed" />
+                    <ToggleSwitch x:Name="TorchToggle" Toggled="TorchToggle_Toggled" />
+                    <TextBlock x:Name="TorchNote" Text="" />
                 </StackPanel>
 
-                <Button Style="{StaticResource FoldButton}" Tag="PowerPanel|POWER" Content="POWER  &#x25B8;" Click="Fold_Click" />
-                <StackPanel x:Name="PowerPanel" Visibility="Collapsed">
-                    <TextBlock x:Name="PowerAlert" Text="Heat protection: power saving forced on" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,2" />
-                    <Grid>
-                        <ToggleSwitch x:Name="PowerSaveToggle" Header="Black screen while streaming" IsOn="True" Toggled="PowerSaveToggle_Toggled" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Tap the black screen to read the status for 15 s. Show camera picture lights it for 60 s (the stream restarts briefly to start and stop the picture). A recording problem lifts the black screen by itself. The start/stop chirp follows the Ringer + notifications volume." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <Grid>
-                        <ToggleSwitch x:Name="SaveAllCheck" Header="Power-saving camera features" IsOn="True" Toggled="SaveAll_Changed" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Less processing and heat: stabilization off for a fixed mount, and focus held once it has settled. Switch it off to choose each one." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <StackPanel x:Name="SavePanel" Visibility="Collapsed" Margin="14,0,0,4">
-                        <ToggleSwitch x:Name="SaveOisCheck" Header="Stabilization off (fixed mount)" Toggled="SaveSub_Changed" />
-                        <ToggleSwitch x:Name="SaveFocusCheck" Header="Hold focus once it has settled" Toggled="SaveSub_Changed" />
+                <!-- RECORDING OPTIONS -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="RecordingFold" Style="{StaticResource DrawerHead}" Tag="RecordingPanel|RecordingFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="RECORDING OPTIONS" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="RecordingFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="RecordingPanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <ToggleSwitch x:Name="RecordOnOpenToggle" Style="{StaticResource RowSwitch}" Header="Record when the app opens" IsOn="True" Toggled="RecordOnOpenToggle_Toggled" />
+                            <Grid>
+                                <Button x:Name="PowerLossPick" Style="{StaticResource PickButton}" Tag="PowerLossBox" Click="Pick_Click" Margin="0,0,26,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="STOP WHEN THE POWER IS LOST" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="PowerLossPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                        <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="When the charger is disconnected (the car is switched off), a countdown shows on the screen. When it ends, recording and live view stop so the battery is not run flat; they start again when the power returns. Keep recording on the countdown skips it once." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <Button x:Name="SegmentPick" Style="{StaticResource PickButton}" Tag="SegmentBox" Click="Pick_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="NEW FILE EVERY" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="SegmentPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                    <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                            <Grid>
+                                <Button x:Name="ImpactPick" Style="{StaticResource PickButton}" Tag="ImpactBox" Click="Pick_Click" Margin="0,0,26,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="CRASH DETECTION" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ImpactPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                        <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="On a jolt above the chosen level, the current file, the one before and the next one are saved. Taps on the screen within 2 s don't count. The camera button saves a clip too." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <TextBlock x:Name="ImpactText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="2,0,0,6" />
+                            <ToggleSwitch x:Name="KeepNextToggle" Style="{StaticResource RowSwitch}" Header="Save clip also keeps the next file" IsOn="True" Toggled="KeepNextToggle_Toggled" />
+                            <ToggleSwitch x:Name="GpsToggle" Style="{StaticResource RowSwitch}" Header="GPS speed and position" IsOn="True" Toggled="GpsToggle_Toggled" />
+                            <TextBlock x:Name="GpsText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="2,0,0,6" />
+                            <Button x:Name="UnitsPick" Style="{StaticResource PickButton}" Tag="UnitsBox" Click="Pick_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="SPEED IN" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="UnitsPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                    <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                            <Grid>
+                                <ToggleSwitch x:Name="SubtitlesToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="Time, speed and position in recordings" IsOn="True" Toggled="SubtitlesToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="A subtitle track inside each recording: date and time, speed, position and IMPACT markers. VLC and most players show it (Subtitle menu); the web page can also download it as an .srt file." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
+                </Border>
 
-                <Button Style="{StaticResource FoldButton}" Tag="NetworkPanel|NETWORK AND LOGIN" Content="NETWORK AND LOGIN  &#x25B8;" Click="Fold_Click" />
-                <StackPanel x:Name="NetworkPanel" Visibility="Collapsed">
-                    <Grid>
-                        <ToggleSwitch x:Name="WebServerToggle" Header="Web page (settings and recordings)" IsOn="False" Toggled="WebServerToggle_Toggled" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Lets a browser on the same Wi-Fi (or the PC on the USB cable) see the status, change settings, and play or download recordings, with the login below. Off: nothing is served; the app only records." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <TextBlock x:Name="WebAddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap"
-                               FontSize="13" FontWeight="SemiBold" Margin="0,-4,0,6" />
-                    <Grid>
-                        <ToggleSwitch x:Name="LogServerToggle" Header="Log and stats pages" IsOn="False" Toggled="LogServerToggle_Toggled" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Also serves the app's log (/log) and graphs of the last 12 hours (/stats: frame rate, storage, battery, power, heat, memory). Needs the web page on." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <Grid>
-                        <ToggleSwitch x:Name="WebDeleteSavedToggle" Header="Delete saved clips from the web page" IsOn="False" Toggled="WebDeleteSavedToggle_Toggled" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Off (the default): nothing over the network can delete, unlock or replace saved clips, or change their limit, even with the login. Saved clips can then only be removed here on the phone. Loop recordings can still be deleted from the web page." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <TextBlock Text="Live view (RTSP, for VLC or an NVR):" Foreground="#7F9A86" FontSize="12" />
-                    <TextBlock x:Name="AddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap"
-                               FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <ToggleSwitch x:Name="AutoStartToggle" Header="Live stream when the app opens" IsOn="False" Toggled="AutoStartToggle_Toggled" />
-                    <Grid>
-                        <ToggleSwitch x:Name="UdpToggle" Header="Allow RTP over UDP" IsOn="False" Toggled="UdpToggle_Toggled" />
-                        <Button Style="{StaticResource InfoButton}"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
-                            Text="Off: viewers get the stream over TCP, which is more reliable on Wi-Fi." /></Flyout></Button.Flyout></Button>
-                    </Grid>
-                    <ToggleSwitch x:Name="SnapshotToggle" Header="Snapshots at /snapshot.jpg" IsOn="False" Toggled="SnapshotToggle_Toggled" />
-                    <TextBlock Text="Login (stream and web page)" Foreground="#7F9A86" FontSize="12" Margin="0,8,0,0" />
-                    <TextBlock x:Name="LoginStatusText" Text="" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4" />
-                    <TextBox x:Name="UserBox" PlaceholderText="User name (admin)" Margin="0,0,0,4" />
-                    <PasswordBox x:Name="PassBox" PlaceholderText="New password (empty = reset to admin)" Margin="0,0,0,4" />
-                    <Button x:Name="SaveLoginButton" Content="Save login" HorizontalAlignment="Stretch" Click="SaveLoginButton_Click" Margin="0,0,0,6" />
-                </StackPanel>
+                <!-- STORAGE -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="StorageFold" Style="{StaticResource DrawerHead}" Tag="StoragePanel|StorageFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="STORAGE" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="StorageFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="StoragePanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <Border Style="{StaticResource Field}"><TextBlock x:Name="StorageText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" /></Border>
+                            <Grid>
+                                <Button x:Name="LocationPick" Style="{StaticResource PickButton}" Tag="LocationBox" Click="Pick_Click" Margin="0,0,26,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="SAVE RECORDINGS TO" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="LocationPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                        <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Automatic uses the SD card when there is one, and the phone's storage when the card is missing or full. Avoid folders inside Videos, Pictures or Music: Windows indexes them, which slows recording down." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <Button x:Name="ChooseFolderButton" Content="Choose folder..." HorizontalAlignment="Stretch" Click="ChooseFolderButton_Click" Margin="0,0,0,4" />
+                            <TextBlock x:Name="LocationText" Text="" FontSize="11" Foreground="#B9CFBD" TextWrapping="Wrap" Margin="2,0,0,6" />
+                            <Grid>
+                                <Button x:Name="LimitPick" Style="{StaticResource PickButton}" Tag="LimitBox" Click="Pick_Click" Margin="0,0,26,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="SPACE FOR LOOP RECORDING" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="LimitPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                        <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="The oldest loop recordings are deleted to stay within this space. Automatic gives them what the storage has left after the saved clips and a small reserve. Files the app did not record are never touched." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <Grid>
+                                <Button x:Name="SavedLimitPick" Style="{StaticResource PickButton}" Tag="SavedLimitBox" Click="Pick_Click" Margin="0,0,26,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="SPACE FOR SAVED CLIPS" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="SavedLimitPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                        <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Saved clips (Save clip, the camera button, crash detection, Keep on the web page) are never deleted by loop recording. Automatic: about a fifth of the storage, 1 to 8 GB." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <ToggleSwitch x:Name="ReplaceSavedToggle" Style="{StaticResource RowSwitch}" Header="Replace the oldest saved clips when full" IsOn="False" Toggled="ReplaceSavedToggle_Toggled" />
+                            <Grid Margin="0,2,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="6" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="DeleteAllButton" Content="Delete all..." HorizontalAlignment="Stretch" FontSize="13" Click="DeleteAllButton_Click"
+                                        Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
+                                <Button x:Name="FormatSdButton" Grid.Column="2" Content="Format SD..." HorizontalAlignment="Stretch" FontSize="13" Click="FormatSdButton_Click"
+                                        Background="#3A1010" Foreground="#FFD0D0" BorderBrush="#A03030" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
 
-                <Button Style="{StaticResource FoldButton}" Tag="DetailsPanel|DETAILS AND LOG" Content="DETAILS AND LOG  &#x25B8;" Click="Fold_Click" />
-                <StackPanel x:Name="DetailsPanel" Visibility="Collapsed">
-                    <TextBlock x:Name="StatusText" Text="" FontSize="12" Foreground="LightGray" TextWrapping="Wrap" Margin="0,0,0,6" />
-                    <TextBlock x:Name="LogText" FontSize="11" TextWrapping="Wrap" Foreground="#B9CFBD"
-                               IsTextSelectionEnabled="True" FontFamily="Consolas" />
-                </StackPanel>
+                <!-- VIDEO -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="VideoFold" Style="{StaticResource DrawerHead}" Tag="VideoPanel|VideoFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="VIDEO" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="VideoFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="VideoPanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <TextBlock x:Name="VideoAlert" Text="Heat protection: 1080p / 6 Mbps" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,4" />
+                            <!-- Pickers: a tile that opens a themed list (the stock ComboBox popup can't be themed on this OS build).
+                                 The ComboBoxes themselves live hidden further down and keep holding the items and the choice. -->
+                            <Button x:Name="ResolutionPick" Style="{StaticResource PickButton}" Tag="ResolutionBox" Click="Pick_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="RESOLUTION" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ResolutionPickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                    <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                            <Button x:Name="BitratePick" Style="{StaticResource PickButton}" Tag="BitrateBox" Click="Pick_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="BITRATE" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="BitratePickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                    <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                            <Grid>
+                                <ToggleSwitch x:Name="HighBwToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="High bandwidth (over 24 Mbps)" IsOn="False" Toggled="HighBwToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Unlocks bitrates up to 60 Mbps. Needs 5 GHz Wi-Fi or USB; 2.4 GHz drops frames." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <Button x:Name="KeyframePick" Style="{StaticResource PickButton}" Tag="KeyframeBox" Click="Pick_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Text="KEYFRAME EVERY" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="KeyframePickText" Text="-" Style="{StaticResource PickValue}" /></StackPanel>
+                                    <TextBlock Grid.Column="1" Text="&#x25BE;" Foreground="#3FBF5F" FontSize="14" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                            <ToggleSwitch x:Name="AudioToggle" Style="{StaticResource RowSwitch}" Header="Microphone audio (AAC)" IsOn="False" Toggled="AudioToggle_Toggled" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- CAMERA -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="CameraFold" Style="{StaticResource DrawerHead}" Tag="CameraPanel|CameraFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="CAMERA" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="CameraFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="CameraPanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <ToggleSwitch x:Name="AutoCameraCheck" Style="{StaticResource RowSwitch}" Header="Automatic focus, exposure and white balance" IsOn="True" Toggled="AutoCameraCheck_Changed" />
+                            <ToggleSwitch x:Name="OisToggle" Style="{StaticResource RowSwitch}" Header="Image stabilization" IsOn="True" Toggled="OisToggle_Toggled" />
+                            <!-- Focus once and lock as a row: off = press to autofocus once and lock there; on (LOCKED, or HELD by the
+                                 power-saving hold) = press to release back to continuous autofocus (UpdateFocusOnceRow). -->
+                            <Button x:Name="FocusOnceButton" Style="{StaticResource BarButton}" Background="#0A160D" BorderBrush="#142A1A" Height="40" Margin="0,0,0,4" Padding="0,0,9,0" Click="FocusOnceButton_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <Border x:Name="FocusOnceBar" Style="{StaticResource BarLight}" Margin="0,7,10,7" />
+                                    <TextBlock Grid.Column="1" Text="Focus once and lock" FontSize="12" Foreground="#D8F5DC" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="FocusOnceStateText" Grid.Column="2" Text="OFF" Style="{StaticResource BarState}" Margin="8,0,0,0" />
+                                </Grid>
+                            </Button>
+                            <TextBlock x:Name="TuningStateText" Text="" Visibility="Collapsed" />
+                            <!-- Each setting is a value tile: small-caps name and an Auto / Manual segment on top, the value line
+                                 (big, with a dim note), the slider below (greyed out while that setting is automatic). The hidden
+                                 ToggleSwitches (FocusAutoCheck ...) still hold Auto / Manual; the segment flips them (Seg_Tapped). -->
+                            <StackPanel x:Name="ManualCameraPanel">
+                                <Border Style="{StaticResource Field}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <TextBlock Text="FOCUS" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                                            <Border x:Name="FocusSeg" Style="{StaticResource Seg}" Tag="FocusAutoCheck" Tapped="Seg_Tapped">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border x:Name="FocusSegA" Style="{StaticResource SegL}"><TextBlock Text="Auto" Style="{StaticResource SegText}" /></Border>
+                                                    <Border x:Name="FocusSegM" Style="{StaticResource SegR}"><TextBlock Text="Manual" Style="{StaticResource SegText}" /></Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0"><TextBlock x:Name="FocusLabel" Text="-" Style="{StaticResource PickValue}" /><TextBlock x:Name="FocusNote" Text="" Style="{StaticResource ValueNote}" /></StackPanel>
+                                        <Slider x:Name="FocusSlider" Minimum="0" Maximum="100" StepFrequency="1" Margin="0,-2,0,-8" ValueChanged="TuningSlider_ValueChanged" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Field}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <TextBlock Text="EXPOSURE" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                                            <Border x:Name="ExposureSeg" Style="{StaticResource Seg}" Tag="ExposureAutoCheck" Tapped="Seg_Tapped">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border x:Name="ExposureSegA" Style="{StaticResource SegL}"><TextBlock Text="Auto" Style="{StaticResource SegText}" /></Border>
+                                                    <Border x:Name="ExposureSegM" Style="{StaticResource SegR}"><TextBlock Text="Manual" Style="{StaticResource SegText}" /></Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0"><TextBlock x:Name="ExposureLabel" Text="-" Style="{StaticResource PickValue}" /><TextBlock x:Name="ExposureNote" Text="" Style="{StaticResource ValueNote}" /></StackPanel>
+                                        <Slider x:Name="ExposureSlider" Minimum="0" Maximum="100" StepFrequency="0.5" Margin="0,-2,0,-8" ValueChanged="TuningSlider_ValueChanged" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Field}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <TextBlock Text="WHITE BALANCE" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                                            <Border x:Name="WbSeg" Style="{StaticResource Seg}" Tag="WbAutoCheck" Tapped="Seg_Tapped">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border x:Name="WbSegA" Style="{StaticResource SegL}"><TextBlock Text="Auto" Style="{StaticResource SegText}" /></Border>
+                                                    <Border x:Name="WbSegM" Style="{StaticResource SegR}"><TextBlock Text="Manual" Style="{StaticResource SegText}" /></Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0"><TextBlock x:Name="WbLabel" Text="-" Style="{StaticResource PickValue}" /><TextBlock x:Name="WbNote" Text="" Style="{StaticResource ValueNote}" /></StackPanel>
+                                        <Slider x:Name="WbSlider" Minimum="2000" Maximum="8000" StepFrequency="100" Margin="0,-2,0,-8" ValueChanged="TuningSlider_ValueChanged" />
+                                        <StackPanel Visibility="Collapsed">
+                                            <ToggleSwitch x:Name="FocusAutoCheck" Toggled="SubAuto_Changed" />
+                                            <ToggleSwitch x:Name="ExposureAutoCheck" Toggled="SubAuto_Changed" />
+                                            <ToggleSwitch x:Name="WbAutoCheck" Toggled="SubAuto_Changed" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- STREAMING: the live view is a side feature of a dashcam, so everything about it folds away here: the live view's
+                     numbers, the Live view bar, the RTSP / Web UI addresses, and live view on open. The head shows the live state. -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="StreamingFold" Style="{StaticResource DrawerHead}" Tag="StreamingPanel|StreamingFoldArrow" Tapped="Fold_Tapped">
+                            <Grid>
+                                <TextBlock Text="STREAMING" Style="{StaticResource DrawerHeadText}" />
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock x:Name="StreamingStateText" Text="OFF" Style="{StaticResource DrawerHeadText}" Foreground="#7FAE86" FontWeight="Normal" Margin="0,0,10,0" />
+                                    <TextBlock x:Name="StreamingFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <StackPanel x:Name="StreamingPanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <!-- The live view's numbers (UpdateStatusCard). -->
+                            <Grid Margin="0,0,0,6">
+
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource Tile}" BorderBrush="#1F3A26">
+                                <StackPanel><TextBlock Text="FPS" Style="{StaticResource TileLabel}" /><TextBlock x:Name="FpsTileText" Text="-" Style="{StaticResource TileBig}" /></StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource Tile}" BorderBrush="#1F3A26">
+                                <StackPanel><TextBlock Text="MBPS" Style="{StaticResource TileLabel}" /><TextBlock x:Name="MbpsTileText" Text="-" Style="{StaticResource TileBig}" /></StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Style="{StaticResource Tile}" BorderBrush="#1F3A26">
+                                <StackPanel><TextBlock Text="VIEWERS" Style="{StaticResource TileLabel}" /><TextBlock x:Name="ViewersText" Text="-" Style="{StaticResource TileBig}" /></StackPanel>
+                            </Border>
+                        </Grid>
+                            <!-- Live view (RTSP): a light-bar button like Preview and Screensaver. -->
+                            <Border Style="{StaticResource Drawer}">
+                                <Button x:Name="StartButton" Style="{StaticResource BarButton}" Background="Transparent" BorderThickness="0" Height="46" Margin="0" Click="LiveButton_Click" IsEnabled="False">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <Border x:Name="LiveBar" Style="{StaticResource BarLight}" Margin="0,9,10,9" />
+                                        <TextBlock Grid.Column="1" Text="Live view (RTSP)" Style="{StaticResource BarName}" />
+                                        <TextBlock x:Name="LiveStateText" Grid.Column="2" Text="OFF" Style="{StaticResource BarState}" />
+                                    </Grid>
+                                </Button>
+                            </Border>
+                
+                            <!-- Service strip: the four ways in, grouped RTSP / WEB UI, each row Wi-Fi or USB with its full address. Green dot =
+                                 reachable, grey = not; the note on the right says why (viewers, live view off, no USB). Tap opens Network and
+                                 login. USB: the phone cannot see the cable as a link (IP over USB arrives as loopback), so USB is certain only
+                                 once a PC has connected; see UpdateServicePills. -->
+                            <StackPanel x:Name="ServiceStrip" Margin="0,0,0,6">
+                                <Border Style="{StaticResource ServiceGroup}">
+                                    <StackPanel>
+                                        <TextBlock Text="RTSP LIVE VIEW" Style="{StaticResource ServiceGroupLabel}" />
+                                        <Border x:Name="SvcWifi" Style="{StaticResource ServicePill}" Tapped="ServicePill_Tapped">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Ellipse x:Name="SvcWifiDot" Style="{StaticResource PillDot}" />
+                                                <TextBlock Grid.Column="1" Text="Wi-Fi" Style="{StaticResource PillLabel}" />
+                                                <TextBlock x:Name="SvcWifiText" Grid.Column="2" Style="{StaticResource PillText}" Text="" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="SvcWifiNote" Grid.Column="3" Style="{StaticResource PillText}" Foreground="#7F9A86" Margin="6,0,0,0" Text="" />
+                                            </Grid>
+                                        </Border>
+                                        <Border x:Name="SvcUsb" Style="{StaticResource ServicePill}" Tapped="ServicePill_Tapped">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Ellipse x:Name="SvcUsbDot" Style="{StaticResource PillDot}" />
+                                                <TextBlock Grid.Column="1" Text="USB" Style="{StaticResource PillLabel}" />
+                                                <TextBlock x:Name="SvcUsbText" Grid.Column="2" Style="{StaticResource PillText}" Text="" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="SvcUsbNote" Grid.Column="3" Style="{StaticResource PillText}" Foreground="#7F9A86" Margin="6,0,0,0" Text="" />
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource ServiceGroup}">
+                                    <StackPanel>
+                                        <TextBlock Text="WEB UI" Style="{StaticResource ServiceGroupLabel}" />
+                                        <Border x:Name="SvcWeb" Style="{StaticResource ServicePill}" Tapped="ServicePill_Tapped">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Ellipse x:Name="SvcWebDot" Style="{StaticResource PillDot}" />
+                                                <TextBlock Grid.Column="1" Text="Wi-Fi" Style="{StaticResource PillLabel}" />
+                                                <TextBlock x:Name="SvcWebText" Grid.Column="2" Style="{StaticResource PillText}" Text="" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="SvcWebNote" Grid.Column="3" Style="{StaticResource PillText}" Foreground="#7F9A86" Margin="6,0,0,0" Text="" />
+                                            </Grid>
+                                        </Border>
+                                        <Border x:Name="SvcWebUsb" Style="{StaticResource ServicePill}" Tapped="ServicePill_Tapped">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Ellipse x:Name="SvcWebUsbDot" Style="{StaticResource PillDot}" />
+                                                <TextBlock Grid.Column="1" Text="USB" Style="{StaticResource PillLabel}" />
+                                                <TextBlock x:Name="SvcWebUsbText" Grid.Column="2" Style="{StaticResource PillText}" Text="" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="SvcWebUsbNote" Grid.Column="3" Style="{StaticResource PillText}" Foreground="#7F9A86" Margin="6,0,0,0" Text="" />
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AutoStartToggle" Style="{StaticResource RowSwitch}" Header="Live stream when the app opens" IsOn="False" Toggled="AutoStartToggle_Toggled" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- POWER -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="PowerFold" Style="{StaticResource DrawerHead}" Tag="PowerPanel|PowerFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="POWER" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="PowerFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="PowerPanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <Grid>
+                                <ToggleSwitch x:Name="HeatProtectToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="Heat protection" IsOn="True" Toggled="HeatProtectToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="When charging pauses on a good charger the phone is hot: 1080p / 6 Mbps, screensaver on, flashlight locked, until it charges normally again. Off: nothing is changed, and on a weak charger the battery drains and the phone dies." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <TextBlock x:Name="PowerAlert" Text="Heat protection: power saving forced on" Foreground="#FF5555" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,4" />
+                            <Grid>
+                                <ToggleSwitch x:Name="KeepPreviewToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="Preview on always" Toggled="KeepPreviewToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Off by default. On: the preview runs even behind the screensaver, so a tap shows the picture at once. Costs CPU and heat; heat protection switches it off." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <StackPanel x:Name="SavePanel" Visibility="Collapsed">
+                                <ToggleSwitch x:Name="SaveAllCheck" Toggled="SaveAll_Changed" />
+                                <ToggleSwitch x:Name="SaveOisCheck" Toggled="SaveSub_Changed" />
+                                <ToggleSwitch x:Name="SaveFocusCheck" Toggled="SaveSub_Changed" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- NETWORK AND LOGIN -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="NetworkFold" Style="{StaticResource DrawerHead}" Tag="NetworkPanel|NetworkFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="NETWORK AND LOGIN" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="NetworkFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="NetworkPanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <Grid>
+                                <ToggleSwitch x:Name="WebServerToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="Web page (settings and recordings)" IsOn="False" Toggled="WebServerToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Lets a browser on the same Wi-Fi (or the PC on the USB cable) see the status, change settings, and play or download recordings, with the login below. Off: nothing is served." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="WEB PAGE" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="WebAddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                            <Grid>
+                                <ToggleSwitch x:Name="LogServerToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="Log and stats pages" IsOn="False" Toggled="LogServerToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Also serves the app's log (/log) and graphs of the last 12 hours (/stats: frame rate, storage, battery, power, heat, memory). Needs the web page on." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <Grid>
+                                <ToggleSwitch x:Name="WebDeleteSavedToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="Delete saved clips from the web page" IsOn="False" Toggled="WebDeleteSavedToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Off (the default): nothing over the network can delete, unlock or replace saved clips, or change their limit, even with the login. Saved clips can then only be removed on the phone." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="LIVE VIEW (RTSP, FOR VLC OR AN NVR)" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="AddressText" Text="…" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                            <Grid>
+                                <ToggleSwitch x:Name="UdpToggle" Style="{StaticResource RowSwitch}" Margin="0,0,26,4" Header="Allow RTP over UDP" IsOn="False" Toggled="UdpToggle_Toggled" />
+                                <Button Style="{StaticResource InfoButton}" VerticalAlignment="Center"><Button.Flyout><Flyout><TextBlock Style="{StaticResource InfoText}"
+                                    Text="Off: viewers get the stream over TCP, which is more reliable on Wi-Fi." /></Flyout></Button.Flyout></Button>
+                            </Grid>
+                            <ToggleSwitch x:Name="SnapshotToggle" Style="{StaticResource RowSwitch}" Header="Snapshots at /snapshot.jpg" IsOn="False" Toggled="SnapshotToggle_Toggled" />
+                            <Border Style="{StaticResource Field}">
+                                <StackPanel>
+                                    <TextBlock Text="LOGIN (STREAM AND WEB PAGE)" Style="{StaticResource FieldLabel}" />
+                                    <TextBlock x:Name="LoginStatusText" Text="" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,4" />
+                                    <TextBox x:Name="UserBox" PlaceholderText="User name (admin)" Margin="0,0,0,4" />
+                                    <PasswordBox x:Name="PassBox" PlaceholderText="New password (empty = reset to admin)" Margin="0,0,0,4" />
+                                    <Button x:Name="SaveLoginButton" Content="Save login" HorizontalAlignment="Stretch" Click="SaveLoginButton_Click" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- VIEWER SETUP: how to open the RTSP stream in an NVR, VLC, OBS or ffplay (as the settings page's section). -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="ViewerFold" Style="{StaticResource DrawerHead}" Tag="ViewerPanel|ViewerFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="VIEWER SETUP" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="ViewerFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="ViewerPanel" Visibility="Collapsed" Margin="8,6,8,4">
+                            <TextBlock Style="{StaticResource InfoText}" FontSize="11" Foreground="#7FAE86" Margin="2,0,2,6" MaxWidth="400"
+                                Text="Which address: Wi-Fi addresses work from any device on the same network; USB addresses (127.0.0.1) only on the PC the phone is plugged into. The stream is standard RTSP (H.264), so NVRs and players need no special options beyond the login and TCP transport." />
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="STREAM ADDRESSES" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ViewerAddrText" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="NVR (BLUE IRIS, FRIGATE, SYNOLOGY, ...)" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ViewerNvrText" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="VLC" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ViewerVlcText" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="OBS STUDIO (AS A WEBCAM)" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ViewerObsText" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="FFPLAY (QUICK TEST)" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ViewerFfplayText" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                            <Border Style="{StaticResource Field}"><StackPanel><TextBlock Text="SNAPSHOT (STILL PICTURE)" Style="{StaticResource FieldLabel}" /><TextBlock x:Name="ViewerSnapText" IsTextSelectionEnabled="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Foreground="#CFFFD2" Margin="0,2,0,0" /></StackPanel></Border>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- DETAILS AND LOG -->
+                <Border Style="{StaticResource Drawer}">
+                    <StackPanel>
+                        <Border x:Name="DetailsFold" Style="{StaticResource DrawerHead}" Tag="DetailsPanel|DetailsFoldArrow" Tapped="Fold_Tapped">
+                            <Grid><TextBlock Text="DETAILS AND LOG" Style="{StaticResource DrawerHeadText}" /><TextBlock x:Name="DetailsFoldArrow" Text="&#x25B8;" Style="{StaticResource DrawerHeadText}" HorizontalAlignment="Right" /></Grid>
+                        </Border>
+                        <StackPanel x:Name="DetailsPanel" Visibility="Collapsed" Margin="8,6,8,6">
+                            <TextBlock x:Name="StatusText" Text="" FontSize="12" Foreground="LightGray" TextWrapping="Wrap" Margin="0,0,0,6" />
+                            <TextBlock x:Name="LogText" FontSize="11" TextWrapping="Wrap" Foreground="#B9CFBD"
+                                       IsTextSelectionEnabled="True" FontFamily="Consolas" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 
         <!-- Full black overlay: on an OLED screen black pixels are off, so this costs almost no power and avoids burn-in. -->
         <Border x:Name="BlackoutOverlay" Grid.ColumnSpan="2" Background="Black" Visibility="Collapsed" Tapped="BlackoutOverlay_Tapped">
-            <TextBlock Text="Tap to show controls" Foreground="#222" FontSize="12"
+            <TextBlock Text="Recording - tap to show controls" Foreground="#222" FontSize="12"
                        HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8" />
         </Border>
     </Grid>

@@ -39,3 +39,6 @@ tools/soak/
 
 # GitHub wiki sources (pushed to the separate wiki repository)
 wiki/
+
+# the install notes shipped in the release zip (tools\Make-Release.ps1)
+!tools/INSTALL.txt

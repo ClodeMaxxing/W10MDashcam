@@ -4,8 +4,6 @@ using System.Globalization;
 using System.Threading.Tasks;
 using Windows.Data.Json;
 using Windows.Foundation.Metadata;
-using Windows.Media.Core;
-using Windows.Media.Playback;
 using Windows.Storage.AccessCache;
 using Windows.Storage.Pickers;
 using Windows.UI.Core;
@@ -157,10 +155,13 @@ namespace W10MDashcam
             await MatchCameraAsync();
         }
 
+        /// <summary>The recording row (the status card's header) and the Live view bar: edge lights and state texts.</summary>
         private void UpdateRunButtons()
         {
-            RecordButton.Content = _recorder.Enabled ? "Stop recording" : "Start recording";
-            StartButton.Content = _wantLive ? "Stop streaming" : "Start streaming";
+            if (StreamBar == null) return;
+            bool rec = _recorder.State == "recording";
+            StreamBar.Background = rec ? GreenFill : Brush(0x16, 0x30, 0x1E);
+            UpdateStreamButton(_wantLive);
         }
 
         // ---------------------------------------------------------------- camera button
@@ -189,7 +190,6 @@ namespace W10MDashcam
         private bool _clipOk;
         private string _clipText = "";
         private DateTime _clipShowUntil = DateTime.MinValue;
-        private MediaPlayer _chime;
 
         /// <summary>
         /// Save clip from the on-screen button or the camera button: a buzz at once, "SAVING..." on the button, then -
@@ -234,18 +234,6 @@ namespace W10MDashcam
             UpdateRecordingUi();
         }
 
-        /// <summary>A short sound from the app's own files (media volume).</summary>
-        private void PlayChime(bool ok)
-        {
-            try
-            {
-                if (_chime == null) _chime = new MediaPlayer { AudioCategory = MediaPlayerAudioCategory.SoundEffects, Volume = 1.0 };
-                _chime.Source = MediaSource.CreateFromUri(new Uri(ok ? "ms-appx:///Assets/ClipSaved.wav" : "ms-appx:///Assets/ClipNone.wav"));
-                _chime.Play();
-            }
-            catch (Exception ex) { Log("Chime: " + ex.Message); }
-        }
-
         private void UpdateSaveButton(bool recording)
         {
             bool showing = DateTime.Now < _clipShowUntil;
@@ -267,22 +255,6 @@ namespace W10MDashcam
                 SaveClipButton.Background = Brush(0x5A, 0x10, 0x10);
                 SaveClipButton.IsEnabled = recording;
             }
-        }
-
-        private static async Task BuzzAsync(int times)
-        {
-            try
-            {
-                if (!ApiInformation.IsTypePresent("Windows.Phone.Devices.Notification.VibrationDevice")) return;
-                var v = Windows.Phone.Devices.Notification.VibrationDevice.GetDefault();
-                if (v == null) return;
-                for (int i = 0; i < times; i++)
-                {
-                    v.Vibrate(TimeSpan.FromMilliseconds(times == 1 ? 250 : 120));
-                    await Task.Delay(times == 1 ? 250 : 260);
-                }
-            }
-            catch { }
         }
 
         // ---------------------------------------------------------------- controls
@@ -376,10 +348,12 @@ namespace W10MDashcam
             CheckStorageWarning();
             // Nobody sees the rest under the black overlay: it is filled in again on the first tick after the screen wakes.
             if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible) return;
-            RecDot.Fill = rec || r.Halted ? Brush(0xFF, 0x30, 0x30) : r.State == "error" ? Brush(0xFF, 0xA0, 0x20) : Brush(0x55, 0x55, 0x55);
-            RecStateText.Text = rec ? "REC " + TimeSpan.FromSeconds(Math.Floor(r.CurrentSeconds)).ToString(@"m\:ss")
+            RecDot.Fill = rec || r.Halted ? Brush(0xFF, 0x30, 0x30) : r.State == "error" ? Brush(0xFF, 0xA0, 0x20) : Brush(0x3A, 0x20, 0x20);
+            RecStateText.Text = rec ? "RECORDING"
                 : r.Halted ? "RECORDING STOPPED"
-                : !r.Enabled ? "NOT RECORDING" : r.State.ToUpperInvariant();
+                : !r.Enabled ? "START RECORDING" : r.State.ToUpperInvariant();
+            RecTimeText.Text = rec ? ((int)r.CurrentSeconds / 60) + ":" + ((int)r.CurrentSeconds % 60).ToString("00") : "";
+            RecStateText.Foreground = rec ? Brush(0xFF, 0xFF, 0xFF) : r.Halted || r.State == "error" ? Brush(0xFF, 0x6B, 0x6B) : Brush(0xCF, 0xE8, 0xD4);
             RecInfoText.Text = DateTime.Now < _clipShowUntil ? _clipText : RecordingSummary();
             UpdateSaveButton(rec);
             LocationText.Text = string.IsNullOrEmpty(r.Location) ? "Decided when recording starts" : "Now: " + r.Location;
@@ -401,12 +375,7 @@ namespace W10MDashcam
             if (halted)
             {
                 IncidentText.Text = "RECORDING IS NOT WORKING\n" + _recorder.Incident;
-                if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible)
-                {
-                    _wakeTimer.Stop();
-                    BlackoutOverlay.Visibility = Visibility.Collapsed;
-                    if (_brightness != null && _brightness.IsSupported) _brightness.StopOverride();
-                }
+                if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible) { var lift = ApplyDisplayAsync(); } // the warning must be seen (PanelOnScreen)
                 if (!_incidentShown)
                 {
                     _incidentShown = true;
@@ -418,7 +387,7 @@ namespace W10MDashcam
             else if (_incidentShown)
             {
                 _incidentShown = false;
-                if (_blackedOut) { _wakeTimer.Stop(); _wakeTimer.Start(); } // black out again after the usual delay
+                var back = ApplyDisplayAsync(); // black out again (MainPage.Display.cs)
             }
         }
 
@@ -516,9 +485,8 @@ namespace W10MDashcam
             string note = InternalStorageNotice();
             StorageNotice.Visibility = note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             if (note.Length > 0) StorageNoticeText.Text = note;
-            string charger = ChargerNotice();
-            ChargerNoticeBorder.Visibility = charger.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (charger.Length > 0) ChargerNoticeText.Text = charger;
+            ChargerNoticeBorder.Visibility = _chargerNotice.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (_chargerNotice.Length > 0) ChargerNoticeText.Text = _chargerNotice;
         }
 
         /// <summary>Text of the "recording to internal storage" notice (empty when recording elsewhere).</summary>

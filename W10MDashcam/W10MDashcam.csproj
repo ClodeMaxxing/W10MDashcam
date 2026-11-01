@@ -98,6 +98,8 @@
     <Compile Include="MainPage.Safety.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="MainPage.Display.cs" />
+    <Compile Include="MainPage.Power.cs" />
     <Compile Include="MainPage.PowerLoss.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
