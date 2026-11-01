@@ -127,7 +127,7 @@ namespace W10MDashcam
             _lastStatSample = DateTime.Now;
             try
             {
-                var r = TryBattery();
+                var r = _battery;
                 bool charging = IsCharging(r);
                 bool streaming = _camera != null && _camera.IsStreaming;
                 var g = _gps.Running ? _gps.Latest : null;
@@ -171,7 +171,7 @@ namespace W10MDashcam
         private string ChargerNotice()
         {
             var w = _power.NetWatts; // a 5-minute average, restarted when the charging state changes
-            var r = TryBattery(); // "Charging" only: a heat pause (Idle) is reported by the heat warning instead
+            var r = _battery; // "Charging" only: a heat pause (Idle) is reported by the heat warning instead
             if (r == null || r.Status != Windows.System.Power.BatteryStatus.Charging || !w.HasValue || w.Value > -0.3) return "";
             return "Charger insufficient: the battery is draining while charging (" + w.Value.ToString("0.0", CultureInfo.InvariantCulture)
                 + " W). Use a 2 A or better charger.";

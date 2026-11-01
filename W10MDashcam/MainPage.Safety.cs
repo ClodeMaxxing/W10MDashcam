@@ -123,7 +123,15 @@ namespace W10MDashcam
             Log("Saved clips: " + (on ? "the oldest are replaced when their space is full" : "never replaced (a warning when their space is full)"));
         }
 
-        /// <summary>Once a second: the live G-sensor reading, and a warning tone when a storage warning appears.</summary>
+        /// <summary>Once a second (also under the black screen): a warning tone when a storage warning appears.</summary>
+        private void CheckStorageWarning()
+        {
+            string w = _recorder.Warning ?? "";
+            if (w.Length > 0 && w != _lastWarning) { Log("Storage warning: " + w); PlayChime(false); }
+            _lastWarning = w;
+        }
+
+        /// <summary>Once a second while the screen shows: the live G-sensor reading and the GPS line.</summary>
         private void UpdateSafetyUi()
         {
             if (RecordingPanel.Visibility == Visibility.Visible) // nobody reads it while the section is folded
@@ -131,9 +139,6 @@ namespace W10MDashcam
                     : string.Format(CultureInfo.InvariantCulture, "Now {0:0.00} g · 10 s peak {1:0.00} g{2}",
                         _impact.Now, _impact.Peak,
                         _impact.LastImpact > DateTime.MinValue ? " · last impact " + _impact.LastImpact.ToString("HH:mm") + " (" + _impact.LastImpactG.ToString("0.0", CultureInfo.InvariantCulture) + " g)" : "");
-            string w = _recorder.Warning ?? "";
-            if (w.Length > 0 && w != _lastWarning) { Log("Storage warning: " + w); PlayChime(false); }
-            _lastWarning = w;
             UpdateGpsUi();
         }
 

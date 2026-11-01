@@ -60,7 +60,7 @@ namespace W10MDashcam
         private bool OnExternalPower()
         {
             if (_testPowerLoss) return false;
-            var r = TryBattery();
+            var r = _battery; // read by this second's stats tick
             return r == null || r.Status != Windows.System.Power.BatteryStatus.Discharging;
         }
 

@@ -234,7 +234,6 @@ namespace W10MDashcam
 
         private void UpdateSaveButton(bool recording)
         {
-            if (_clipSaving && (DateTime.Now - _clipSavingSince).TotalSeconds > 8) _clipSaving = false; // never stick
             bool showing = DateTime.Now < _clipShowUntil;
             if (_clipSaving)
             {
@@ -359,6 +358,10 @@ namespace W10MDashcam
             UpdateIncidentUi();
             CheckPowerLoss();
             SampleStats();
+            if (_clipSaving && (DateTime.Now - _clipSavingSince).TotalSeconds > 8) _clipSaving = false; // never stick
+            CheckStorageWarning();
+            // Nobody sees the rest under the black overlay: it is filled in again on the first tick after the screen wakes.
+            if (_blackedOut && BlackoutOverlay.Visibility == Visibility.Visible) return;
             RecDot.Fill = rec || r.Halted ? Brush(0xFF, 0x30, 0x30) : r.State == "error" ? Brush(0xFF, 0xA0, 0x20) : Brush(0x55, 0x55, 0x55);
             RecStateText.Text = rec ? "REC " + TimeSpan.FromSeconds(Math.Floor(r.CurrentSeconds)).ToString(@"m\:ss")
                 : r.Halted ? "RECORDING STOPPED"
