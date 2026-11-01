@@ -1,5 +1,20 @@
 # Changelog
 
+## W10MDashcam 0.8.1
+
+Small follow-up to 0.8; recording, live view and crash detection are unchanged.
+
+- Changing the login through `/config` (USB) now also needs the current password (`current`), as on the web page.
+  `tools\set-camera-config.ps1` adds it from the login it signs in with.
+- Changes (`/camera/set`, `/recordings/...`, `/config`) are read from the request body only; fields in the URL are
+  ignored.
+- Deleting saved clips from the web page (with *Delete saved clips from the web page* on) and *Delete all* with saved
+  clips now only touch the app's own recordings, never other `.mp4` files someone put in the Saved folder.
+- The web page's Save clip tip and message now say that the next file is kept too when *Save clip also keeps the next
+  file* is on (the default).
+- The live-view-on-open setting is saved under a new name (`LiveOnOpen`, was `AutoStart`); the old value is moved once.
+- Removed an unused per-frame counter; a JSON reply can no longer fail on an unexpected shape.
+
 ## W10MDashcam 0.8
 
 Saved clips are protected from the network by default, logins are harder to guess, and recording comes first.

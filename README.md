@@ -153,7 +153,9 @@ NVRs take the new one by themselves without asking for the password.
 
 `tools\set-camera-config.ps1 -Body "field=value&..."` sends settings to `/config` over the USB cable (`/config` only
 works over USB). It needs the login: give `-User` and `-Password`, or set the environment variables `W10M_USER` and
-`W10M_PASSWORD`; otherwise it asks. The web page uses the same fields (`/camera/set`). Every change (POST), over USB
+`W10M_PASSWORD`; otherwise it asks. Changing the login there also needs the current password (`current`); the script
+adds it from the login it signs in with. Fields are read from the request body only, never from the URL. The web page
+uses the same fields (`/camera/set`). Every change (POST), over USB
 too, needs the login, the header `X-Requested-With: W10MDashcam` and the phone's address as `Host` (127.0.0.1 or
 localhost over USB, an IP address over Wi-Fi); the script sends them.
 
