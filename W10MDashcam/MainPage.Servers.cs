@@ -120,10 +120,10 @@ namespace W10MDashcam
 
         private static string F(double? v, string fmt = "0.##") => v.HasValue ? v.Value.ToString(fmt, CultureInfo.InvariantCulture) : "";
 
-        /// <summary>Once a second (UpdateRecordingUi): one row every 30 s, the same columns as the stats page.</summary>
+        /// <summary>Once a second (UpdateRecordingUi): one row every 30 s, the same columns as the stats page, only while that page is on.</summary>
         private void SampleStats()
         {
-            if ((DateTime.Now - _lastStatSample).TotalSeconds < 30) return;
+            if (!_logOn || (DateTime.Now - _lastStatSample).TotalSeconds < 30) return;
             _lastStatSample = DateTime.Now;
             try
             {
@@ -149,7 +149,7 @@ namespace W10MDashcam
                     F((DateTime.Now - _appStarted).TotalSeconds, "0"),
                     rec.State == "recording" ? F(rec.WriteMBps) : "", F(rec.DroppedFrames),
                     rec.FreeBytes >= 0 ? F(rec.FreeBytes / 1073741824.0) : "", F(speed)
-                }).Replace("\"", "");
+                }.Select(x => (x ?? "").Replace(",", ";").Replace("\"", ""))); // a comma inside a field would shift the columns
                 lock (_statLock)
                 {
                     _statRows.Enqueue(row);
