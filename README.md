@@ -100,34 +100,51 @@ stays lifted until you resume. The web page shows the same. Reasons:
 
 ## Phone screen and web page
 
-Both share one look (black with green accents, version at the top right) and the same sections. Click a header to fold
-it; explanations sit behind small (i) icons.
+The web page is a mirror of the phone screen (black with green accents, the version at the top right): the same card,
+bar buttons and drawers in the same order, arranged for a dashcam, recording first and streaming folded away. Tap a
+drawer head to open or close it; explanations sit behind small (i) icons. From the top:
 
-- **Status:** state, resolution, uptime and viewers (with the stream latency while someone watches), fps and Mbps, and
-  tiles: battery (red when the battery is draining although the phone says "Charging", judged every second from the
-  power reading), Wi-Fi, temperature (Healthy / Paused / Hot / Protect), phone and app CPU, memory, **speed**,
-  **storage** (footage the loop keeps) and power. Notices below it: default login, internal storage, charger
-  insufficient (with the watts), heat. In safe mode a **Return to normal mode** button appears.
-- **Recording:** the REC card with **SAVE CLIP** and a one-line summary, Start/Stop recording, *Record when the app opens*.
-- **Recording options:** file length, crash detection (with the live G-sensor reading), keep the next file, GPS, speed
-  units, subtitles.
-- **Storage:** see above; on the web page also the list of recordings (play, **Download**, **Captions**, **Keep**/**Unlock**,
-  **Delete**).
-- **Video, Camera, Power, Network and login, Details and log:** as in W10MSecurityCam (resolution and bitrate, high
-  bandwidth, microphone; automatic or manual focus, exposure and white balance, flashlight; black screen, power-saving
-  camera features; stream addresses, login).
+- **The status card**, with the app name as its top band. Its header row is the **recording button**: a tall bar with
+  a green edge light while recording, a pulsing red light, **RECORDING** with the elapsed time / **START RECORDING** /
+  **RECORDING STOPPED** (or **HEAT PROTECTION** in red) and the format pill (`4K30`; `SAFE` in safe mode). Under it
+  the phone tiles: battery (red when the battery is draining although the phone says "Charging", judged every second
+  from the power reading), Wi-Fi, temperature (Healthy / Paused / Hot / Protect), phone and app CPU, memory, **speed**,
+  **storage** (footage the loop keeps) and power. Notices below: default login, internal storage, charger insufficient
+  (with the watts), heat. In safe mode a **Return to normal mode** button appears.
+- **The recording card:** the incident and power-loss banners, **SAVE CLIP** and a one-line summary.
+- **Three bar buttons** with an edge light that is green while on: **Preview** (the camera picture: 60 s while the
+  camera runs behind the screensaver, otherwise until pressed again), **Screensaver** (on by default: a black screen
+  with the preview off while the camera runs; tap it to read the status for 15 s) and **Flashlight** (works whenever
+  the camera is open, recording or not; off after 30 s because the LED heats the phone).
+- **Drawers:**
+  - **Recording options:** record when the app opens, stop when the power is lost, file length, crash detection (with
+    the live G-sensor reading), keep the next file, GPS, speed units, captions.
+  - **Storage:** see above; on the web page also the list of recordings (play, **Download**, **Captions**,
+    **Keep**/**Unlock**, **Delete**).
+  - **Video** and **Camera:** as in W10MSecurityCam (resolution, bitrate and keyframe as picker tiles, high bandwidth,
+    microphone; automatic focus, exposure and white balance, image stabilization, focus once and lock, the three value
+    tiles).
+  - **Streaming** (closed by default; its head shows the live state): the live view's FPS / MBPS / VIEWERS tiles, the
+    **Live view (RTSP)** bar, the **RTSP LIVE VIEW** and **WEB UI** groups with a Wi-Fi and a USB row each (the RTSP
+    rows read *live view off* until live view is on; USB green once a PC has connected, amber *cable?*, grey *no USB*)
+    and *Live stream when the app opens*.
+  - **Power:** **Heat protection** (on by default; asks before it goes off) and **Preview on always** (off by default:
+    the preview runs behind the screensaver, the Preview bar reads *ON · ALWAYS*; costs CPU and heat).
+  - **Network and login**, **Viewer setup** (the live-view addresses with the login, NVR, VLC, OBS and ffplay notes)
+    and **Details and log**.
 
-**Black screen:** while the camera runs, the phone screen is black and the preview is off (an OLED screen uses almost
-no power for black). Tap it to read the status for 15 seconds; **Show camera picture** (or a tap on the dark preview
-area) shows the picture for 60 seconds (the camera restarts briefly to start and stop the preview, which also starts
-a new file). **Preview on the phone** (under Camera) is off by default; *Keep the preview running behind the black
-screen* (under Power, off by default: it costs CPU and heat) keeps it alive so a tap shows the picture at once; heat
-protection forces that off. The same rules run in W10MSecurityCam and W10MWebCam.
+**Screensaver:** while the camera runs, the phone screen is black and the preview is off (an OLED screen uses almost
+no power for black). Tap it to read the status for 15 seconds; **Preview** (or a tap on the dark preview area) shows
+the picture for 60 seconds (the camera restarts briefly to start and stop the preview, which also starts a new file).
+*Preview on always* keeps the preview alive behind the screensaver so a tap shows the picture at once; heat protection
+forces that off. The same rules run in W10MSecurityCam and W10MWebCam.
 
 **Heat protection:** Windows 10 Mobile gives apps no temperature. If charging pauses on an adequate charger for
-20 seconds, the phone is probably hot: the app lowers the video to 1080p at 6 Mbps, forces the power-saving options on,
-shows a red warning and chimes and vibrates (as for a power loss). Your settings come back after 30 seconds of
-charging again and at least 3 minutes, with a short chime. The
+20 seconds, the phone is probably hot: the app lowers the video to 1080p at 6 Mbps, forces the screensaver on and the
+preview and stabilization off, locks the flashlight, shows a red warning and chimes and vibrates (as for a power
+loss). Your settings come back after 30 seconds of charging again and at least 3 minutes, with a short chime. The
+**Heat protection** switch under Power (on by default) turns the intervention off; the app asks first, and a hot phone
+then gets a distinct *HOT, no protection* warning and nothing else. The
 usual cause is a power source that can't keep up (a PC USB port, a small car adapter): the phone then also drains its
 battery, which heats it. The warnings say so; use a 2 A or better charger.
 
