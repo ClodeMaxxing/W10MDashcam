@@ -35,16 +35,18 @@ namespace W10MDashcam.Streaming
 
     /// <summary>
     /// The small web interface, served on the log port (http://PHONE-IP:5001) and on the RTSP ports:
-    ///   /             the app log (plain text)
+    ///   /, /camera    the settings page; /camera/state its JSON; POST /camera/set changes
+    ///   /log, /stats  the app log and the graphs - only with the log and stats switch on
     ///   /status       health as JSON (for monitoring)
-    ///   /snapshot.jpg the latest picture, when snapshots are turned on (needs the login when one is set)
+    ///   /login        asks the browser for the login, then back to /camera
+    ///   /snapshot.jpg the latest picture, when snapshots are turned on (needs the login)
     ///   /config       view (GET) or change (POST, form fields) settings - only over the USB cable
-    ///   /camera       focus / exposure / white balance page (changes need the stream login, or the USB cable)
     ///   /recordings   the dashcam recordings as JSON; /recordings/file?name=N[&amp;saved=1][&amp;dl=1] plays or downloads one;
     ///                 /recordings/srt?name=N[&amp;saved=1] its captions as an .srt file;
     ///                 POST /recordings/save keeps the current clip, POST /recordings/delete (name, saved) deletes one
-    /// Everything needs the stream login, over USB too. Changes (POST) also need the X-Requested-With: W10MDashcam
-    /// header and the phone's address as Host.
+    /// Reading is open on the home network (view only); changes, the snapshot and the recordings themselves need the
+    /// stream login, over USB too. Changes (POST) also need the X-Requested-With: W10MDashcam header and the phone's
+    /// address as Host.
     /// </summary>
     internal sealed class HttpApi
     {
@@ -80,8 +82,10 @@ namespace W10MDashcam.Streaming
         }
 
         private static byte[] InternalError() => Reply(500, "Internal Server Error", "text/plain", "Internal error, see the app log\n");
-        private static byte[] WebOff() => Reply(503, "Service Unavailable", "text/plain", "The web page is switched off on the phone (Network and login).\n");
-        private static byte[] LogOff() => Reply(404, "Not Found", "text/plain", "The log and stats pages are switched off (Network and login on the phone, or Network and login on the web page).\n");
+        private static byte[] WebOff() => SwitchedOff("web page");
+        private static byte[] LogOff() => SwitchedOff("log and stats pages");
+        private static byte[] SwitchedOff(string what) =>
+            Reply(403, "Forbidden", "text/plain", "The " + what + (what.EndsWith("s") ? " are" : " is") + " switched off. Switch " + (what.EndsWith("s") ? "them" : "it") + " on on the phone (Network and login)" + (what == "web page" ? "" : " or on the settings page") + ".\n");
 
         public async Task<byte[]> HandleAsync(HttpRequest r)
         {
@@ -89,13 +93,20 @@ namespace W10MDashcam.Streaming
             {
                 if (!WebEnabled) return WebOff();
                 string path = r.Path.TrimEnd('/');
-                // Everything needs the login, over USB too: any program or web page on the PC the phone is plugged into
-                // can reach the USB port, so being on USB proves nothing.
-                // Checked once per request: with qop each nonce count may only be used once.
-                byte[] refusedLogin = CheckLogin(r);
-                if (refusedLogin != null) return refusedLogin;
-                if (path == "" || path == "/log")
-                    return LogEnabled ? Reply(200, "OK", "text/plain; charset=utf-8", GetLog()) : LogOff();
+                // The pages, the log and the JSON are view only without a login (as in W10MWebCam). Changes, the snapshot,
+                // the recordings themselves and /login need the stream login, over USB too: any program or web page on the
+                // PC the phone is plugged into can reach the USB port, so being on USB proves nothing. A login the browser
+                // sends must be right, though: a wrong or outdated one gets a 401, so the browser renews the nonce (stale)
+                // or asks again instead of resending it forever. Checked once per request: with qop each nonce count may
+                // only be used once.
+                string authorization = Header(r, "Authorization");
+                if (Auth != null && (authorization != null || path == "/login") && Auth.IsLockedOut(r.RemoteIp))
+                    return Reply(429, "Too Many Requests", "text/plain", "Too many wrong logins - try again in 30 seconds\n", "Retry-After: 30\r\n");
+                bool canWrite = false, stale = false;
+                if (Auth != null && authorization != null && !(canWrite = Auth.Check(r.Method, r.Target, authorization, r.RemoteIp, out stale)))
+                    return Reply(401, "Unauthorized", "text/plain", "Login required\n", Auth.Challenge(stale));
+                if (path == "/log")
+                    return LogEnabled ? Reply(200, "OK", "text/plain; charset=utf-8", GetLog(), "Cache-Control: no-store\r\n") : LogOff();
 
                 if (path == "/stats")
                     return LogEnabled
@@ -105,28 +116,39 @@ namespace W10MDashcam.Streaming
                 if (path == "/status")
                     return Reply(200, "OK", "application/json", GetStatusJson());
 
+                if (path == "/login")
+                {
+                    // Already logged in: straight back to the page. Otherwise the browser asks for the login, then goes back.
+                    if (canWrite) return Reply(302, "Found", "text/plain", "", "Location: /camera\r\n");
+                    return Reply(401, "Unauthorized", "text/html; charset=utf-8",
+                        "<!doctype html><meta http-equiv='refresh' content='0;url=/camera'><p>Login needed. <a href='/login'>Try again</a></p>\n",
+                        Auth != null ? Auth.Challenge(stale) : "");
+                }
+
                 if (path == "/snapshot.jpg" || path == "/snapshot")
                 {
+                    if (!canWrite) return LoginNeeded(stale);
                     var jpg = GetSnapshotJpeg != null ? await GetSnapshotJpeg() : null;
                     if (jpg == null) return Reply(404, "Not Found", "text/plain", "Snapshots are turned off (or the camera is not streaming)\n");
                     return Reply(200, "OK", "image/jpeg", jpg, "Cache-Control: no-store\r\n");
                 }
 
-                if (path == "/camera" || path == "/camera/state" || path == "/camera/set")
-                    return await HandleCameraAsync(r, path);
+                if (path == "" || path == "/camera" || path == "/camera/state" || path == "/camera/set")
+                    return await HandleCameraAsync(r, path == "" ? "/camera" : path, canWrite, stale);
 
                 if (path == "/recordings/srt")
-                    return await HandleCaptionsAsync(r);
+                    return canWrite ? await HandleCaptionsAsync(r) : LoginNeeded(stale);
 
                 if (path == "/recordings" || path == "/recordings/save" || path == "/recordings/delete" || path == "/recordings/deleteall"
                     || path == "/recordings/lock" || path == "/recordings/unlock")
-                    return await HandleRecordingsAsync(r, path);
+                    return await HandleRecordingsAsync(r, path, canWrite, stale);
 
                 if (path == "/config")
                 {
                     if (!r.FromUsb) return Reply(403, "Forbidden", "text/plain", "Settings can only be changed over the USB cable\n");
                     if (r.Method == "POST" && ApplyConfig != null)
                     {
+                        if (!canWrite) return LoginNeeded(stale);
                         string refused = RefuseForeignPost(r);
                         if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
                         var form = ParseForm(r.Body); // changes only in the body, never in the URL
@@ -142,7 +164,7 @@ namespace W10MDashcam.Streaming
                     return Reply(200, "OK", "text/plain; charset=utf-8", GetConfig());
                 }
 
-                return Reply(404, "Not Found", "text/plain", "Not found. Try / (log), /status, /camera, /snapshot.jpg\n");
+                return Reply(404, "Not Found", "text/plain", "Not found. Try /camera, /status, /log, /stats, /snapshot.jpg, /recordings\n");
             }
             catch (Exception ex)
             {
@@ -151,14 +173,18 @@ namespace W10MDashcam.Streaming
             }
         }
 
+        /// <summary>A 401 that makes the browser ask for the login (stale: the login was right, only the nonce was old).</summary>
+        private byte[] LoginNeeded(bool stale) =>
+            Reply(401, "Unauthorized", "text/plain", "Login needed\n", Auth != null ? Auth.Challenge(stale) : "");
+
         /// <summary>
-        /// The camera-settings page. Everything here needs the stream login (over USB too), checked in HandleAsync.
+        /// The camera-settings page: view only without the login; canWrite = the request carried the right login
+        /// (checked in HandleAsync), which /camera/set needs - a 401 makes the browser ask for it.
         /// </summary>
-        private async Task<byte[]> HandleCameraAsync(HttpRequest r, string path)
+        private async Task<byte[]> HandleCameraAsync(HttpRequest r, string path, bool canWrite, bool stale)
         {
             string result = null;
             bool loginSet = Auth != null && Auth.Enabled;
-            bool canWrite = loginSet;
 
             if (path == "/camera")
                 return Reply(200, "OK", "text/html; charset=utf-8", CameraPage.Html, "Cache-Control: no-store\r\n");
@@ -166,8 +192,7 @@ namespace W10MDashcam.Streaming
             if (path == "/camera/set")
             {
                 if (r.Method != "POST") return Reply(405, "Method Not Allowed", "text/plain", "POST only\n");
-                if (!canWrite)
-                    return Reply(403, "Forbidden", "text/plain", "Changes need the login\n");
+                if (!canWrite) return LoginNeeded(stale);
                 string refused = RefuseForeignPost(r);
                 if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
                 var all = ParseForm(r.Body); // changes only in the body, never in the URL
@@ -188,12 +213,13 @@ namespace W10MDashcam.Streaming
                 if (end > 0) json = json.Substring(0, end) + ",\"result\":\"" + first + "\"}";
             }
             if (json.StartsWith("{")) json = "{\"canWrite\":" + (canWrite ? "true" : "false") + ",\"loginSet\":" + (loginSet ? "true" : "false")
-                + ",\"defaultLogin\":" + (Auth != null && Auth.IsDefault ? "true" : "false") + ",\"user\":\"" + (Auth != null ? Auth.UserName.Replace("\\", "").Replace("\"", "") : "") + "\"" + (json.Length > 2 ? "," : "") + json.Substring(1);
+                + ",\"fromUsb\":" + (r.FromUsb ? "true" : "false")
+                + ",\"defaultLogin\":" + (Auth != null && Auth.IsDefault ? "true" : "false") + ",\"user\":\"" + (canWrite && Auth != null ? Auth.UserName.Replace("\\", "").Replace("\"", "") : "") + "\"" + (json.Length > 2 ? "," : "") + json.Substring(1);
             return Reply(200, "OK", "application/json", json, "Cache-Control: no-store\r\n");
         }
 
-        /// <summary>The recordings list (JSON) and the save / delete actions (same rules as /camera/set).</summary>
-        private async Task<byte[]> HandleRecordingsAsync(HttpRequest r, string path)
+        /// <summary>The recordings list (JSON, view only) and the save / delete actions (same rules as /camera/set).</summary>
+        private async Task<byte[]> HandleRecordingsAsync(HttpRequest r, string path, bool canWrite, bool stale)
         {
             if (Recorder == null) return Reply(404, "Not Found", "text/plain", "No recorder\n");
             if (path == "/recordings")
@@ -212,8 +238,7 @@ namespace W10MDashcam.Streaming
                 return Reply(200, "OK", "application/json", sb.ToString(), "Cache-Control: no-store\r\n");
             }
             if (r.Method != "POST") return Reply(405, "Method Not Allowed", "text/plain", "POST only\n");
-            bool canWrite = Auth != null && Auth.Enabled;
-            if (!canWrite) return Reply(403, "Forbidden", "text/plain", "Changes need the login\n");
+            if (!canWrite) return LoginNeeded(stale);
             string refused = RefuseForeignPost(r);
             if (refused != null) return Reply(403, "Forbidden", "text/plain", refused);
             if (path == "/recordings/save")
