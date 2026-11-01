@@ -1,5 +1,39 @@
 # Changelog
 
+## W10MDashcam 0.9
+
+Feature parity with W10MSecurityCam and W10MWebCam: what one app of the family did better now exists in all three where
+it applies. Recording, crash detection, GPS and live view are unchanged.
+
+**What you notice**
+- **The battery tile turns red when the battery is draining although the phone says "Charging"** (a PC USB port or a
+  small car adapter with 4K), judged every second from the power reading: Charging and the 5-minute average below
+  −0.3 W. Before, the level had to drop 2 % over 20 minutes while the *Charger insufficient* notice was already up. The
+  notice now also appears in `/status` (`chargerNotice`), and the web page's battery bar turns red too.
+- **Temp badge in three levels:** *Paused* (amber) the moment charging pauses, *Hot* (red) after 20 s, *Protect* (red)
+  while heat protection is on. Before, a one-second pause flashed the badge red.
+- **A chime and a vibration** when heat protection sets in (the same as a power loss), and a short one when charging
+  resumes.
+- **View only without the login:** the page, `/camera/state`, `/status`, the recordings list, the log and the stats can
+  be read on the home network without logging in; changes, the snapshot, the recordings themselves (play, download,
+  captions) and `/login` need the login (the browser asks). The page shows a *View only* notice with a *Log in* button.
+  The settings page is now served at `/` as well (the log is at `/log`); a switched-off web, log or stats page
+  answers 403 (was 503 / 404).
+- The phone's **addresses follow network changes** (a new DHCP lease, another Wi-Fi network).
+- **Return to normal mode** button on the phone while the app is in safe mode; before, only the web page could do that.
+
+**Under the hood**
+- `/status` also carries W10MWebCam's field names (`uptime`, `battery`, `charging`, `onExternalPower`, `latencyMs`,
+  `wifiBars`, `cpuPhone`, `cpuApp`, `heat`, `heatBadge`, `heatLevel`, `protect`, `alert`, `blackout`, `previewing`,
+  `torchOn`, `webOn`, `logOn`, `statsOn`, ...); the older names stay. `charging` means current flows in (Charging), the
+  new `onExternalPower` means a charger is connected (Charging or Idle); the low-battery text looks at the latter.
+- Three previous sessions' logs are kept (`log-previous.txt`, `-2`, `-3`), each headed CRASHED, closed normally or
+  ended abruptly; a clean close writes "App suspended" so the difference can be told.
+- `tools\Soak-Monitor.ps1` is the same script in all three repositories (reads `/status` without a login, collects the
+  phone log every 5 minutes while the log page is on); `tools\Make-Release.ps1` packs the release zip and SHA256SUMS.
+- The battery and charger rules moved to `MainPage.Power.cs` (with the chime and vibration helpers), the same file as
+  in W10MSecurityCam.
+
 ## W10MDashcam 0.8.1
 
 Small follow-up to 0.8; recording, live view and crash detection are unchanged.

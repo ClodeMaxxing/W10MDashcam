@@ -24,9 +24,12 @@ identity (`W10MDashcam`, CN=W10MDashcam), so it installs beside both. Only one a
 | Live view (RTSP) | `rtsp://PHONE-IP:8554/live` (USB: `rtsp://127.0.0.1:8020/live`) |
 
 **Off on a fresh install:** the app is a dashcam first and only records. Switch on *Web page* (and, if wanted, *Log and
-stats pages*) under *Network and login* on the phone; the live view has its own switches. Everything needs the login
-(see Login), over the USB cable too. With *Web page* off the phone serves nothing over HTTP, not even over USB. Give
-the phone a fixed address (a DHCP reservation in the router) so the page is always at the same place.
+stats pages*) under *Network and login* on the phone; the live view has its own switches. The page, `/status`, the
+recordings list, the log and the stats can then be read on the home network without a login (view only); changes,
+the recordings themselves and the live view need the login (see Login), over the USB cable too. With *Web page* off
+the phone serves nothing over HTTP, not even over USB (a switched-off page answers 403). The settings page is also
+served at `http://PHONE-IP:5001`. Give the phone a fixed address (a DHCP reservation in the router) so the page is
+always at the same place.
 
 The web port (5001) answers at most 16 connections at once (more get "503 Busy, try again"); a request has to arrive
 complete within 10 seconds, and a download the client takes nothing of for 30 seconds is cut off. The RTSP ports take
@@ -101,8 +104,10 @@ Both share one look (black with green accents, version at the top right) and the
 it; explanations sit behind small (i) icons.
 
 - **Status:** state, resolution, uptime and viewers (with the stream latency while someone watches), fps and Mbps, and
-  tiles: battery, Wi-Fi, temperature, phone and app CPU, memory, **speed**, **storage** (footage the loop keeps) and
-  power. Notices below it: default login, internal storage, heat.
+  tiles: battery (red when the battery is draining although the phone says "Charging", judged every second from the
+  power reading), Wi-Fi, temperature (Healthy / Paused / Hot / Protect), phone and app CPU, memory, **speed**,
+  **storage** (footage the loop keeps) and power. Notices below it: default login, internal storage, charger
+  insufficient (with the watts), heat. In safe mode a **Return to normal mode** button appears.
 - **Recording:** the REC card with **SAVE CLIP** and a one-line summary, Start/Stop recording, *Record when the app opens*.
 - **Recording options:** file length, crash detection (with the live G-sensor reading), keep the next file, GPS, speed
   units, subtitles.
@@ -117,8 +122,9 @@ no power for black). Tap it to read the status for 15 seconds; **Show camera pic
 (the camera restarts briefly to start and stop the preview, which also starts a new file).
 
 **Heat protection:** Windows 10 Mobile gives apps no temperature. If charging pauses on an adequate charger for
-20 seconds, the phone is probably hot: the app lowers the video to 1080p at 6 Mbps, forces the power-saving options on
-and shows a red warning. Your settings come back after 30 seconds of charging again and at least 3 minutes. The
+20 seconds, the phone is probably hot: the app lowers the video to 1080p at 6 Mbps, forces the power-saving options on,
+shows a red warning and chimes and vibrates (as for a power loss). Your settings come back after 30 seconds of
+charging again and at least 3 minutes, with a short chime. The
 usual cause is a power source that can't keep up (a PC USB port, a small car adapter): the phone then also drains its
 battery, which heats it. The warnings say so; use a 2 A or better charger.
 
@@ -136,8 +142,10 @@ battery, which heats it. The warnings say so; use a 2 A or better charger.
 
 ## Login
 
-One login protects the page, recordings and downloads, `/status`, `/config`, the log and the live view, over Wi-Fi and
-over the USB cable alike: any program or web page on the PC the phone is plugged into can reach the USB port. A fresh
+One login protects every change on the page, the recordings themselves (play, download, captions), the snapshot,
+`/config` and the live view, over Wi-Fi and over the USB cable alike: any program or web page on the PC the phone is
+plugged into can reach the USB port. Reading the page, the recordings list, `/status`, the log and the stats needs no
+login (view only; the page shows a *View only* notice with a *Log in* button). A fresh
 install uses **admin / admin** and warns until you change it: on the web page or on the phone (*Network and login*), or
 over USB with `tools\Set-Camera-Login.cmd` (it asks for the current login first). An empty password resets it to
 admin / admin; it does not remove the login. Forgot it? Set a new one on the phone (*Network and login*). Digest
