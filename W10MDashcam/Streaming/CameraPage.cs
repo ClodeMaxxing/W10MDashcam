@@ -88,7 +88,7 @@ button.danger{background:#3a1010;color:#ffd0d0;border-color:#a03030}button.dange
 <h2>Recording</h2>
 <div class='row'><div class='card'>
 <div class='top'><span class='dot' id='rdot'></span><span class='state' id='rstate'>-</span><span class='pill r' id='rloc'></span></div>
-<button class='save' id='rsave' data-tip='Keeps the file being recorded and the one before it in the Saved folder, where loop recording never deletes them.'>SAVE CLIP</button>
+<button class='save' id='rsave' data-tip='Keeps the file being recorded, the one before it and (when Save clip also keeps the next file is on) the next one in the Saved folder, where loop recording never deletes them.'>SAVE CLIP</button>
 <div class='sub' id='rinfo' style='margin:6px 0 0'></div></div>
 <div class='btnrow' style='margin-top:8px'><button id='rbtn'>Stop recording</button><label><input type='checkbox' id='roo'> Record when the app opens</label></div></div>
 <h2>Recording options</h2>
@@ -393,7 +393,7 @@ function recPost(path,body,msg){
  fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'W10MDashcam'},body:body||''})
  .then(function(r){return r.text().then(function(t){return {ok:r.ok,t:t}})}).then(function(x){$('msg').textContent=x.ok?(msg||x.t):x.t;setTimeout(function(){load();recList()},800)});
 }
-$('rsave').onclick=function(){recPost('/recordings/save','','Saving: the current file ends now (and the one before it is kept too); a new file starts with no gap')};
+$('rsave').onclick=function(){recPost('/recordings/save','','Saving: the current file ends now (the one before it is kept too, and the next one when Save clip also keeps the next file is on); a new file starts with no gap')};
 $('rref').onclick=recList;
 $('lgo').onchange=function(){touched=Date.now();send('log='+(this.checked?'on':'off'))};
 $('rpl').onchange=function(){touched=Date.now();send('powerloss='+(this.value=='0'?'off':this.value))};
