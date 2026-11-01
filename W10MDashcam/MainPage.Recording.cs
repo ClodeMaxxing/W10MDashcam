@@ -4,8 +4,6 @@ using System.Globalization;
 using System.Threading.Tasks;
 using Windows.Data.Json;
 using Windows.Foundation.Metadata;
-using Windows.Media.Core;
-using Windows.Media.Playback;
 using Windows.Storage.AccessCache;
 using Windows.Storage.Pickers;
 using Windows.UI.Core;
@@ -189,7 +187,6 @@ namespace W10MDashcam
         private bool _clipOk;
         private string _clipText = "";
         private DateTime _clipShowUntil = DateTime.MinValue;
-        private MediaPlayer _chime;
 
         /// <summary>
         /// Save clip from the on-screen button or the camera button: a buzz at once, "SAVING..." on the button, then -
@@ -234,18 +231,6 @@ namespace W10MDashcam
             UpdateRecordingUi();
         }
 
-        /// <summary>A short sound from the app's own files (media volume).</summary>
-        private void PlayChime(bool ok)
-        {
-            try
-            {
-                if (_chime == null) _chime = new MediaPlayer { AudioCategory = MediaPlayerAudioCategory.SoundEffects, Volume = 1.0 };
-                _chime.Source = MediaSource.CreateFromUri(new Uri(ok ? "ms-appx:///Assets/ClipSaved.wav" : "ms-appx:///Assets/ClipNone.wav"));
-                _chime.Play();
-            }
-            catch (Exception ex) { Log("Chime: " + ex.Message); }
-        }
-
         private void UpdateSaveButton(bool recording)
         {
             bool showing = DateTime.Now < _clipShowUntil;
@@ -267,22 +252,6 @@ namespace W10MDashcam
                 SaveClipButton.Background = Brush(0x5A, 0x10, 0x10);
                 SaveClipButton.IsEnabled = recording;
             }
-        }
-
-        private static async Task BuzzAsync(int times)
-        {
-            try
-            {
-                if (!ApiInformation.IsTypePresent("Windows.Phone.Devices.Notification.VibrationDevice")) return;
-                var v = Windows.Phone.Devices.Notification.VibrationDevice.GetDefault();
-                if (v == null) return;
-                for (int i = 0; i < times; i++)
-                {
-                    v.Vibrate(TimeSpan.FromMilliseconds(times == 1 ? 250 : 120));
-                    await Task.Delay(times == 1 ? 250 : 260);
-                }
-            }
-            catch { }
         }
 
         // ---------------------------------------------------------------- controls

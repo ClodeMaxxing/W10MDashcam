@@ -676,6 +676,7 @@ namespace W10MDashcam
         {
             int tick = _statsTick++;
             _battery = TryBattery();
+            UpdatePowerFlags();
             if ((DateTime.Now - _appStarted).TotalSeconds > 20) MarkLaunchHealthy();
             UpdateRecordingUi();
             // a preview left running behind the black screen (its stop restart was skipped while busy) is stopped on a later tick
@@ -1317,7 +1318,7 @@ namespace W10MDashcam
             var oldest = _batteryHistory.Count > 0 ? _batteryHistory.Peek() : null;
             bool fallingWhileCharging = !discharging && oldest != null && pct.HasValue &&
                                         (DateTime.Now - oldest.Item1).TotalMinutes >= 20 && pct.Value <= oldest.Item2 - 2;
-            BatteryFalling = discharging || fallingWhileCharging;
+            _fallingSlow = fallingWhileCharging; // BatteryFalling itself is judged every second from the power reading (MainPage.Power.cs)
             if ((discharging || fallingWhileCharging || pct < 15) && (DateTime.Now - _lastPowerWarning).TotalMinutes >= 10)
             {
                 _lastPowerWarning = DateTime.Now;
@@ -1517,6 +1518,8 @@ namespace W10MDashcam
         private string ChargeNote()
         {
             var r = TryBattery();
+            if (_chargerNotice.Length > 0 && _power.NetWatts.HasValue)
+                return "charger too weak: " + (-_power.NetWatts.Value).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " W leaves the battery";
             if (_power.Supply == "NotPresent") return "No charger connected";
             if (_power.Supply == "Inadequate") return "Windows reports the charger as inadequate";
             return r != null && r.Status == Windows.System.Power.BatteryStatus.Idle

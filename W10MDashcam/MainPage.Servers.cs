@@ -13,7 +13,7 @@ namespace W10MDashcam
     /// <summary>
     /// The web page and the log pages can be switched off (the app is a dashcam first: a fresh install starts with both
     /// off and records only). The stats page (/stats) shows the last 12 hours of status samples as graphs, like the
-    /// PC's soak report. Also the "charger insufficient" notice.
+    /// PC's soak report. (The "charger insufficient" notice lives in MainPage.Power.cs.)
     /// </summary>
     public sealed partial class MainPage
     {
@@ -163,18 +163,6 @@ namespace W10MDashcam
         private string StatsRows()
         {
             lock (_statLock) return string.Join(",\n", _statRows.Select(x => "\"" + x + "\""));
-        }
-
-        // ---------------------------------------------------------------- charger insufficient
-
-        /// <summary>Text of the notice when the battery drains although the phone says it is charging (empty otherwise).</summary>
-        private string ChargerNotice()
-        {
-            var w = _power.NetWatts; // a 5-minute average, restarted when the charging state changes
-            var r = _battery; // "Charging" only: a heat pause (Idle) is reported by the heat warning instead
-            if (r == null || r.Status != Windows.System.Power.BatteryStatus.Charging || !w.HasValue || w.Value > -0.3) return "";
-            return "Charger insufficient: the battery is draining while charging (" + w.Value.ToString("0.0", CultureInfo.InvariantCulture)
-                + " W). Use a 2 A or better charger.";
         }
     }
 }
