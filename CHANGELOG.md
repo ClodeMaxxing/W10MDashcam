@@ -1,5 +1,92 @@
 # Changelog
 
+## W10MDashcam 0.8
+
+Saved clips are protected from the network by default, logins are harder to guess, and recording comes first.
+
+**What you notice**
+- **New phone switch *Delete saved clips from the web page*** (*Network and login*, off by default, needs the web
+  page on). While it is off, nothing over the network can delete, unlock or replace saved clips, or change their
+  space, even with the login: Delete with a saved clip, Delete all with saved clips included, Unlock, and the
+  `savedlimit` / `replacesaved` fields (web page and `/config`) are refused with a note. Saved clips can then only be
+  removed on the phone. Loop recordings can still be deleted, and Keep still works.
+- **Changing the login on the web page needs the current password** (new *Current password* box), so a signed request
+  caught on the network can't be sent again with a new password. The phone and `/config` over USB are unchanged.
+- **New passwords need at least 8 characters** (8-64), on the phone, on the web page and through `/config`. A shorter
+  password set before keeps working until you change it.
+- **Wrong logins are slowed down:** after 5 wrong logins from one address within a minute, that address is refused for
+  30 seconds (the web page answers `429 Too Many Requests`, the live view 401). A right login clears the count.
+- The login challenge is renewed every 5 minutes. Browsers, VLC and NVRs take the new one by themselves; nobody is
+  asked for the password again.
+- **`/status` no longer contains the GPS position:** latitude, longitude, accuracy and heading are left out there
+  (speed, fix and units stay). The web page still shows them.
+- When the web page refuses an action it now shows the phone's reason instead of its own success text.
+- An RTSP connection that has not started playing is closed when no complete request arrives for 30 seconds, so a
+  silent or half-open connection no longer holds one of the 8 places. The last of the 8 only takes the PC over USB.
+- The web port (5001) answers at most 16 connections at once; more get `503` "Busy, try again". A request has to
+  arrive complete within 10 seconds, and a request with a body over 64 KB is refused. A reply or a recording download
+  that the client takes nothing of for 30 seconds (a paused player, a dead connection) is cut off, so it no longer
+  holds the file and the connection; this applies to the RTSP ports' web replies too.
+- The stats page only samples while the log and stats pages are switched on.
+- The pages can no longer be shown inside a frame on another site. An error answer (500) only says "Internal error,
+  see the app log"; the details go to the app log.
+- The web page and the log pages no longer switch themselves on for installs from before those switches existed (this
+  only affected development builds before 0.7.6).
+
+**Fixes**
+- **Recording first:** live view was handed each frame before the recorder, so packetizing for every viewer could
+  delay the recording (the encoder sink keeps only 3 frames before it skips to the next keyframe), and an error there
+  skipped it. The recorder now gets each frame first.
+- **Loop recording:** a file that could not be deleted (for example while it was being downloaded) was dropped from
+  the list and its space counted as freed, leaving an orphaned file and a wrong free-space figure. It now stays listed
+  and counted, the next oldest is deleted instead, and it is tried again at the next clean-up.
+- **Heat protection:** when the stream was busy starting or stopping, the restart that lowers the video to 1080p at
+  6 Mbps was skipped, so it could stay at 4K while heat protection was on. It is now retried by the once-a-second heat
+  check.
+- Switching focus to manual starts from the last sensible lens position: the 950's autofocus sometimes reports focus 0
+  (the near end stop) while the picture is sharp, which made the manual picture jump out of focus (fix from W10MWebCam).
+- Recorder failures on the camera thread (a frame not recorded) are logged: the first 5 with the error, then one line
+  per 1000. Before, they left no trace.
+- When the encoder sink drops a video backlog to wait for the next keyframe, the queued audio frames are kept.
+- A comma inside a stats field (a format or bitrate label) no longer shifts the later columns of the stats row.
+- The recordings list on the web page escapes `"` and `>` in names too.
+- `.srt` captions: a damaged file can no longer make the export loop for billions of samples.
+- The jobs that run every 2, 10 or 15 seconds were skipped whenever a one-second tick came late; they now count the
+  ticks.
+- If the Windows password vault fails while storing the default login, the app still starts and the log says so;
+  nobody gets in until a login is saved (before, a missing password let everyone in).
+- Failed web requests are logged, at most one line per 30 seconds.
+
+**Under the hood**
+- Login: random nonces, kept for 5 minutes; `qop="auth"` is offered and its nonce count must go up, while clients
+  without qop (VLC, many NVRs) keep working. Each login answer must be for the address requested (for RTSP also an
+  address under it, since VLC and many NVRs sign every request with the stream's base address). The login is checked
+  once per request, recording downloads included.
+- RTSP: no list query or lock for every frame, and one audio payload per frame for all viewers.
+- The fps and Mbps counters are read and written safely between the encoder thread and the screen (64-bit values on
+  ARM).
+- The battery is read once a second and shared by every check that needs it; the resolution label is worked out only
+  when the format changes; while the screen is black the recording card's texts are not redrawn (the checks behind
+  them still run).
+- The encoder sink hands each frame to the app without an extra copy, and reports handler errors again after a stream
+  restart.
+- The log: a line is only queued when it is logged; the file and the screen are updated once a second (also on suspend
+  and after a crash).
+- Recording file names must end exactly at `.mp4`.
+- The old `CamAuto` and `Bitrate` settings keys are converted once and removed. Unused code removed.
+
+**Tools**
+- `tools\Crash-Dumps.ps1`, with `tools\Enable-Crash-Dumps.cmd` and `tools\Get-Crash-Dump.cmd` (from W10MWebCam):
+  switch Windows crash-dump collection on for the installed W10MDashcam through Device Portal (it is per installed
+  version, so switch it on again after an update), list the dumps and download them to `tools\dump\`. A Device Portal
+  pairing made by a sister app's tools is reused.
+- `tools\Sync-Core.ps1` compares the source files the three apps share (`-Check`, the default) and copies one app's
+  copy over the others (`-Fix -From APP`). It needs all three repositories on the PC.
+- `tools\Build-And-Deploy.cmd` finds Visual Studio 2019's MSBuild with vswhere (the 2019 Community path if vswhere is
+  missing) and logs which one it used. It and `tools\Install-Only.cmd` now report the right exit code after the
+  pairing retry.
+- `tools\test-rtsp.ps1` takes the renewed login challenge during long runs.
+
 ## W10MDashcam 0.7.7
 
 Security fixes; nothing else changes.

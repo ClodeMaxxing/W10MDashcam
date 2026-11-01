@@ -18,7 +18,7 @@ identity (`W10MDashcam`, CN=W10MDashcam), so it installs beside both. Only one a
 |---|---|
 | Settings and recordings page | `http://PHONE-IP:5001/camera` (over USB: `http://127.0.0.1:8020/camera`) |
 | Recordings (JSON) | `http://PHONE-IP:5001/recordings` |
-| Health | `http://PHONE-IP:5001/status` (JSON) |
+| Health | `http://PHONE-IP:5001/status` (JSON; GPS speed and fix, but not the position) |
 | Log | `http://PHONE-IP:5001/log` (with *Log and stats pages* on) |
 | Stats | `http://PHONE-IP:5001/stats`: graphs of the last 12 hours, sampled every 30 s |
 | Live view (RTSP) | `rtsp://PHONE-IP:8554/live` (USB: `rtsp://127.0.0.1:8020/live`) |
@@ -27,6 +27,11 @@ identity (`W10MDashcam`, CN=W10MDashcam), so it installs beside both. Only one a
 stats pages*) under *Network and login* on the phone; the live view has its own switches. Everything needs the login
 (see Login), over the USB cable too. With *Web page* off the phone serves nothing over HTTP, not even over USB. Give
 the phone a fixed address (a DHCP reservation in the router) so the page is always at the same place.
+
+The web port (5001) answers at most 16 connections at once (more get "503 Busy, try again"); a request has to arrive
+complete within 10 seconds, and a download the client takes nothing of for 30 seconds is cut off. The RTSP ports take
+8 connections, the last one only from the PC over USB; a connection that has not started playing is closed when it
+sends no complete request for 30 seconds.
 
 ## Recording
 
@@ -43,6 +48,9 @@ the phone a fixed address (a DHCP reservation in the router) so the page is alwa
   current file ends at once (a new one starts with no gap) and is kept together with the file before it, and by default
   the next one too. A chime and a buzz confirm it. Saved clips go to the `Saved` folder, which loop recording never
   touches. On the web page, **Keep** saves any loop recording and **Unlock** gives a clip back to loop recording.
+  Deleting, unlocking or replacing saved clips (and changing their space) from the web page or `/config` only works
+  with *Delete saved clips from the web page* switched on (*Network and login* on the phone, off by default); otherwise
+  saved clips can only be removed on the phone.
 - **Crash detection:** the G-sensor saves the clip (and the next file) on a jolt above the chosen level: low 2.5 g,
   medium 1.6 g (default), high 1 g. Taps on the screen within 2 seconds don't count.
 - **Time, speed and position:** every recording has a subtitle track with the date and time, GPS speed (km/h or mph,
@@ -135,6 +143,12 @@ over USB with `tools\Set-Camera-Login.cmd` (it asks for the current login first)
 admin / admin; it does not remove the login. Forgot it? Set a new one on the phone (*Network and login*). Digest
 authentication is used; traffic is not encrypted, so use it on a network you trust.
 
+Since 0.8 a new password needs at least 8 characters everywhere (a shorter one set before keeps working until you
+change it), and changing the login on the web page also needs the current password (*Current password*). After 5
+wrong logins from one address within a minute, that address is refused for 30 seconds (the web page answers
+`429 Too Many Requests`, the live view 401). The phone renews the login challenge every 5 minutes; browsers, VLC and
+NVRs take the new one by themselves without asking for the password.
+
 ## Settings over USB
 
 `tools\set-camera-config.ps1 -Body "field=value&..."` sends settings to `/config` over the USB cable (`/config` only
@@ -149,20 +163,22 @@ localhost over USB, an IP address over Wi-Fi); the script sends them.
 | `location` | `auto`, `phone`, `sd`, `custom` (a folder chosen on the phone first) |
 | `segment` | minutes per file (1-30) |
 | `storage` | loop space: `auto`, GB, or `all` |
-| `savedlimit` | saved clips' space: `auto`, GB, or `none` |
-| `replacesaved`, `keepnext`, `gps`, `subtitles` | `on` / `off` |
+| `savedlimit` | saved clips' space: `auto`, GB, or `none` (only with *Delete saved clips from the web page* on) |
+| `replacesaved` | `on` / `off` (only with *Delete saved clips from the web page* on) |
+| `keepnext`, `gps`, `subtitles` | `on` / `off` |
 | `impact` | `off`, `low`, `medium`, `high` |
 | `units` | `auto`, `kmh`, `mph` |
 | `powerloss` | seconds without power before recording stops (10-3600), or `off` |
 | `log` | `on` / `off`: the log and stats pages (the web page itself is switched on the phone) |
 | `saveclip`, `resume`, `testincident` | `1` |
 | `testpowerloss` | `1` acts as if the charger were unplugged (for testing), `0` back to normal |
-| Camera and stream | `format=WIDTHxHEIGHT@FPS`, `bitrate=MBPS\|auto`, `highbw`, `audio`, `camera`, `focus`, `exposure`, `wb`, `powersave`, `stream`, `engine=normal`, `udp`, `user`, `password` |
+| Camera and stream | `format=WIDTHxHEIGHT@FPS`, `bitrate=MBPS\|auto`, `highbw`, `audio`, `camera`, `focus`, `exposure`, `wb`, `powersave`, `stream`, `engine=normal`, `udp`, `user`, `password` (a new one needs at least 8 characters; on the web page, `/camera/set`, also `current`, the current password) |
 
 `http://127.0.0.1:8020/config` shows the current values (after signing in). Recordings over HTTP: `/recordings/file?name=N[&saved=1][&dl=1]`
 (with byte ranges for seeking), `/recordings/srt?name=N[&saved=1]`, and POST `/recordings/save`, `/recordings/delete`
 (`name`, `saved`), `/recordings/lock`, `/recordings/unlock`, `/recordings/deleteall` (`confirm=DELETE`, `saved=1` to
-include saved clips).
+include saved clips). `/recordings/unlock` and deleting with `saved=1` are refused (403) unless *Delete saved clips
+from the web page* is on.
 
 ## Install a release
 
@@ -177,7 +193,7 @@ include saved clips).
 
 | File | What it is |
 |---|---|
-| `W10MDashcam_<version>.0_ARM.appx` | The app (the package version has four parts, for example `0.7.7.0`) |
+| `W10MDashcam_<version>.0_ARM.appx` | The app (the package version has four parts, for example `0.8.0.0`) |
 | `Dependencies\Microsoft.NET.Native.Framework.1.7.appx` | .NET Native framework 1.7 (ARM) |
 | `Dependencies\Microsoft.NET.Native.Runtime.1.7.appx` | .NET Native runtime 1.7 (ARM) |
 | `Dependencies\Microsoft.VCLibs.ARM.14.00.appx` | Visual C++ runtime 14.00 (ARM), for the native encoder sink |
@@ -197,12 +213,15 @@ install, or the phone refuses it.
 
 | Script | Use |
 |---|---|
-| `tools\Build-And-Deploy.cmd` | Build Release ARM and install on the phone (USB first, then Wi-Fi using `tools\phone-ip.txt`) |
+| `tools\Build-And-Deploy.cmd` | Build Release ARM and install on the phone (USB first, then Wi-Fi using `tools\phone-ip.txt`). Finds Visual Studio 2019's MSBuild with vswhere (the 2019 Community path if vswhere is missing) |
 | `tools\Install-Only.cmd` | Re-install the last build |
 | `tools\Get-Phone-Log.cmd` | Download the phone log (needs the login, like the two below) |
 | `tools\Set-Camera-Login.cmd`, `tools\set-camera-config.ps1` | Login and settings over USB (`-User`/`-Password` or `W10M_USER`/`W10M_PASSWORD`, otherwise they ask) |
 | `tools\Test-RTSP.cmd`, `tools\test-rtsp.ps1` | Check the live view |
 | `tools\Soak-Monitor.ps1`, `tools\Monitor-Portal.ps1` | Long-run status recorder with an HTML report; Device Portal CPU/GPU/battery log |
+| `tools\Crash-Dumps.ps1` | Windows crash dumps through Device Portal: `-Pair PIN` once, `-Enable` (again after each app update), `-List`, `-Get` (to `tools\dump\`), `-Disable` |
+| `tools\Enable-Crash-Dumps.cmd`, `tools\Get-Crash-Dump.cmd` | Switch crash dumps on and list them / download W10MDashcam's dumps |
+| `tools\Sync-Core.ps1` | Compares the source files the three apps share (`-Check`) or copies one app's copy over the others (`-Fix -From APP`); needs all three repositories |
 
 Put the phone's IP address in `tools\phone-ip.txt` (one line, not committed). Developer notes are in
 [NOTES.md](NOTES.md), release history in [CHANGELOG.md](CHANGELOG.md).
