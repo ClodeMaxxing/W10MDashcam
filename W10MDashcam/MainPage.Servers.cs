@@ -109,7 +109,12 @@ namespace W10MDashcam
 
         private string ServerConfigText() => "log=" + (_logOn ? "on" : "off") + " (the log and stats pages; the web page itself is switched on the phone)\n";
 
-        private void AddServerJson(JsonObject o) => o["logOn"] = JsonValue.CreateBooleanValue(_logOn);
+        private void AddServerJson(JsonObject o)
+        {
+            o["webOn"] = JsonValue.CreateBooleanValue(_webOn);
+            o["logOn"] = JsonValue.CreateBooleanValue(_logOn);
+            o["statsOn"] = JsonValue.CreateBooleanValue(_logOn); // one switch for both pages in the dashcam
+        }
 
         // ---------------------------------------------------------------- stats samples (for /stats)
 
